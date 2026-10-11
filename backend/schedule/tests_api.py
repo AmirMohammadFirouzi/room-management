@@ -34,7 +34,7 @@ print("schedule OK,", len(r.json()["assignments"]), "assignments")
 # --- settings read ---
 r = c.get("/api/settings/", **H)
 assert r.status_code == 200
-print("settings read OK:", r.json())
+print("settings read OK:", r.json()["vacuum_days"], r.json()["vacuum_people"])
 
 # --- member cannot write settings ---
 r = c.put("/api/settings/", {"vacuum_people": 3}, content_type="application/json", **H)
@@ -64,7 +64,7 @@ r = c.get(f"/api/assignments/{target.pk}/candidates/", **H)
 assert r.status_code == 200, r.content
 cands = r.json()
 assert cands and all(c["user"] != target.assigned_to_id for c in cands)
-print("candidates OK:", [x["display_name"] for x in cands[:3]])
+print("candidates OK:", len(cands))
 
 # create substitution as admin for the assignee
 admin_tok = c.post(
@@ -103,7 +103,9 @@ else:
 # credits ledger for the original (debtor)
 r = c.get("/api/credits/", **H)
 assert r.status_code == 200
-print("credits OK:", r.json())
+credits = r.json()
+assert "i_owe" in credits and "owed_to_me" in credits
+print("credits OK: i_owe =", len(credits["i_owe"]))
 
 # --- expenses ---
 r = c.get("/api/expenses/", **H)
@@ -112,7 +114,7 @@ expense = r.json()[0]
 my_shares = [
     s
     for s in expense["shares"]
-    if s["user_name"] == "رضا محمدی"  # the logged-in member
+    if s["user"] in User.objects.filter(username="reza").values_list("id", flat=True)
 ]
 unpaid = [s for s in my_shares if s["status"] == "unpaid"]
 if unpaid:
@@ -137,12 +139,17 @@ else:
 # balance
 r = c.get("/api/expenses/balance/", **H)
 assert r.status_code == 200
-print("balance OK:", r.json())
+print("balance OK: unpaid =", r.json()["unpaid_total"])
 
-# --- admin generate schedule for an explicit week (idempotent) ---
+# --- admin generate schedule for a unique probe week (repeatable) ---
 from datetime import timedelta as _td
 
+from schedule.models import WeeklySchedule as _WS
+
 probe = date.today() + _td(days=70)
+probe = probe + _td(days=(5 - probe.weekday()) % 7)  # next Saturday
+while _WS.objects.filter(week_start=probe).exists():
+    probe = probe + _td(days=7)  # keep probing until a fresh week is found
 r = c.post(
     "/api/schedule/generate/",
     {"week": probe.isoformat()},
@@ -162,7 +169,7 @@ print("generate week OK:", r.json()["week_start"])
 # --- stats ---
 r = c.get("/api/stats/", **AH)
 assert r.status_code == 200 and len(r.json()["per_member"]) == 8
-print("stats OK:", r.json()["per_member"][0])
+print("stats OK: total =", sum(m["total"] for m in r.json()["per_member"]))
 
 # member blocked from stats
 r = c.get("/api/stats/", **H)
@@ -197,5 +204,16 @@ r = c.put(
 assert r.status_code == 200, r.content
 assert r.json()["vacuum_days"] == [2, 4]
 print("admin settings write OK")
+
+# Leave the room as we found it: restore the default vacuum config.
+r = c.put(
+    "/api/settings/",
+    {"vacuum_days": [2, 4, 6], "vacuum_people": 2},
+    content_type="application/json",
+    **AH,
+)
+assert r.status_code == 200, r.content
+assert r.json()["vacuum_days"] == [2, 4, 6]
+print("settings restored to defaults")
 
 print("\nALL API SMOKE TESTS PASSED")

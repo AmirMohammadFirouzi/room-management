@@ -19,6 +19,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
         source="get_task_type_display", read_only=True
     )
     weekday_label = serializers.SerializerMethodField()
+    is_substituted = serializers.SerializerMethodField()
 
     class Meta:
         model = Assignment
@@ -35,6 +36,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "assignee_avatar",
             "original_assignee",
             "original_assignee_name",
+            "is_substituted",
             "status",
             "confirmed_at",
         ]
@@ -44,6 +46,9 @@ class AssignmentSerializer(serializers.ModelSerializer):
         from .models import WEEKDAY_LABELS
 
         return WEEKDAY_LABELS[obj.weekday]
+
+    def get_is_substituted(self, obj):
+        return obj.is_substituted
 
 
 class WeeklyScheduleSerializer(serializers.ModelSerializer):

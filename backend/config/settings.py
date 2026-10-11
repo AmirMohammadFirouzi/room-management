@@ -5,16 +5,19 @@ Small by design: Django + DRF + SQLite only. No Redis, Celery, Postgres.
 """
 
 from datetime import timedelta
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY: keep the secret key out of the repo in production (env var).
-SECRET_KEY = "django-insecure-dev-only-change-me-in-production"
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY", "django-insecure-dev-only-change-me-in-production"
+)
 
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
 # ---------------------------------------------------------------------------
 # Application definition
@@ -121,8 +124,9 @@ REST_FRAMEWORK = {
 # ---------------------------------------------------------------------------
 # CORS — Vite dev server proxy hits /api directly, but allow origin anyway.
 # ---------------------------------------------------------------------------
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# Comma-separated extra origins for online deployment, e.g.
+# FRONTEND_URLS=https://room.example.com
+CORS_ALLOWED_ORIGINS = os.environ.get(
+    "FRONTEND_URLS", "http://localhost:5173,http://127.0.0.1:5173"
+).split(",")
 CORS_ALLOW_CREDENTIALS = True
