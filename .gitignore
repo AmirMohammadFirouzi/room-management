@@ -6,11 +6,13 @@ __pycache__/
 db.sqlite3
 pip_out.txt
 pip_err.txt
-backend/*_out.txt
+*_out.txt
 frontend/npm_out.txt
 frontend/npm_err.txt
+backend/feature_check.sqlite3
 /staticfiles/
 *.log
+frontend/build.log
 
 # Node / React frontend
 frontend/node_modules/
