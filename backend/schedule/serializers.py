@@ -1,8 +1,16 @@
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
+from common.jalali import jalali_date, jalali_datetime
 
-from .models import Assignment, SiteSettings, SubstitutionCredit, SubstitutionRequest, WeeklySchedule
+from .models import (
+    Assignment,
+    Notification,
+    SiteSettings,
+    SubstitutionCredit,
+    SubstitutionRequest,
+    WeeklySchedule,
+)
 
 
 class AssignmentSerializer(serializers.ModelSerializer):
@@ -20,6 +28,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
     )
     weekday_label = serializers.SerializerMethodField()
     is_substituted = serializers.SerializerMethodField()
+    date_jalali = serializers.SerializerMethodField()
 
     class Meta:
         model = Assignment
@@ -27,6 +36,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "id",
             "schedule",
             "date",
+            "date_jalali",
             "weekday",
             "weekday_label",
             "task_type",
@@ -50,25 +60,108 @@ class AssignmentSerializer(serializers.ModelSerializer):
     def get_is_substituted(self, obj):
         return obj.is_substituted
 
+    def get_date_jalali(self, obj):
+        return jalali_date(obj.date, weekday=True)
+
 
 class WeeklyScheduleSerializer(serializers.ModelSerializer):
     assignments = AssignmentSerializer(many=True, read_only=True)
+    week_start_jalali = serializers.SerializerMethodField()
+    created_at_jalali = serializers.SerializerMethodField()
+    published_at_jalali = serializers.SerializerMethodField()
 
     class Meta:
         model = WeeklySchedule
-        fields = ["id", "week_start", "created_at", "created_by", "assignments"]
+        fields = [
+            "id",
+            "week_start",
+            "week_start_jalali",
+            "created_at",
+            "created_at_jalali",
+            "created_by",
+            "schedule_status",
+            "published_at",
+            "published_at_jalali",
+            "assignments",
+        ]
+
+    def get_week_start_jalali(self, obj):
+        return jalali_date(obj.week_start, weekday=True)
+
+    def get_created_at_jalali(self, obj):
+        return jalali_datetime(obj.created_at)
+
+    def get_published_at_jalali(self, obj):
+        return jalali_datetime(obj.published_at) if obj.published_at else None
 
 
 class SiteSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = SiteSettings
         fields = [
+            "site_title",
+            "site_logo",
+            "bank_name",
+            "bank_logo",
+            "brand_color",
+            "card_number",
+            "card_holder",
             "vacuum_days",
             "vacuum_people",
+            "cooking_days",
+            "cooking_people",
             "cleaning_enabled",
             "vacuuming_enabled",
             "cooking_enabled",
         ]
+
+    def _clean_days(self, value, label: str):
+        try:
+            days = [int(d) for d in value]
+        except (TypeError, ValueError):
+            raise serializers.ValidationError(f"{label} باید اعداد ۰ تا ۶ باشند.")
+        if any(d < 0 or d > 6 for d in days):
+            raise serializers.ValidationError(
+                f"{label} باید بین ۰ (شنبه) تا ۶ (جمعه) باشند."
+            )
+        return sorted(set(days))
+
+    def validate_vacuum_days(self, value):
+        return self._clean_days(value, "روزهای جاروبرقی")
+
+    def validate_cooking_days(self, value):
+        return self._clean_days(value, "روزهای آشپزی")
+
+    def validate_card_number(self, value):
+        digits = "".join(ch for ch in str(value) if ch.isdigit())
+        if len(digits) != 16:
+            raise serializers.ValidationError("شماره کارت باید ۱۶ رقم باشد.")
+        return digits
+
+    def validate_card_holder(self, value):
+        return str(value).strip() or "اتاق مشترک"
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    kind_label = serializers.CharField(source="get_kind_display", read_only=True)
+    created_at_jalali = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Notification
+        fields = [
+            "id",
+            "kind",
+            "kind_label",
+            "message",
+            "data",
+            "is_read",
+            "created_at",
+            "created_at_jalali",
+        ]
+        read_only_fields = fields
+
+    def get_created_at_jalali(self, obj):
+        return jalali_datetime(obj.created_at)
 
 
 class SubstitutionRequestSerializer(serializers.ModelSerializer):
@@ -83,6 +176,7 @@ class SubstitutionRequestSerializer(serializers.ModelSerializer):
     )
     assignment_detail = AssignmentSerializer(source="assignment", read_only=True)
     created_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M")
+    created_at_jalali = serializers.SerializerMethodField()
 
     class Meta:
         model = SubstitutionRequest
@@ -97,12 +191,16 @@ class SubstitutionRequestSerializer(serializers.ModelSerializer):
             "reason",
             "status",
             "created_at",
+            "created_at_jalali",
             "decided_at",
             "decided_by",
             "decided_by_name",
             "reject_reason",
         ]
         read_only_fields = fields
+
+    def get_created_at_jalali(self, obj):
+        return jalali_datetime(obj.created_at)
 
 
 class SubstitutionCreateSerializer(serializers.Serializer):

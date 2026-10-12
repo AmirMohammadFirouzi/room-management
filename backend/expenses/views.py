@@ -32,6 +32,14 @@ class ExpenseListCreateView(generics.ListCreateAPIView):
             return ExpenseCreateSerializer
         return ExpenseSerializer
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        # Privacy: members only ever see their own slice of an invoice.
+        # Admins get the full دنگ breakdown.
+        if self.request.method != "POST" and not self.request.user.is_admin_role:
+            ctx["share_user"] = self.request.user
+        return ctx
+
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         serializer = ExpenseCreateSerializer(data=request.data)
@@ -43,11 +51,13 @@ class ExpenseListCreateView(generics.ListCreateAPIView):
                 is_active=True, is_superuser=False
             ).values_list("id", flat=True)
         )
+        payer_name = data.get("payer_name", "مدیریت")
         expense = Expense.objects.create(
             title=data["title"],
             total_amount=data["total_amount"],
             note=data.get("note", ""),
             created_by=request.user,
+            payer_name=payer_name,
         )
         amounts = split_amount(expense.total_amount, len(member_ids))
         ExpenseShare.objects.bulk_create(
@@ -190,6 +200,21 @@ class PaymentDecisionView(APIView):
         payment.decided_by = request.user
         payment.save()
         payment.share.save(update_fields=["status"])
+
+        if payment.status == Payment.Status.APPROVED:
+            from common.jalali import fa_digits
+            from schedule.models import Notification
+
+            Notification.notify(
+                payment.submitted_by,
+                Notification.Kind.PAYMENT_APPROVED,
+                (
+                    f"پرداخت {fa_digits(f'{payment.amount:,}')} تومانی شما برای "
+                    f"«{payment.share.expense.title}» تأیید شد."
+                ),
+                {"payment": payment.id},
+            )
+
         return Response(PaymentSerializer(payment).data)
 
 

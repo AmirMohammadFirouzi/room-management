@@ -10,6 +10,9 @@ class Expense(models.Model):
 
     title = models.CharField(max_length=200, verbose_name="نام آیتم")
     total_amount = models.PositiveBigIntegerField(verbose_name="مبلغ کل (تومان)")
+    payer_name = models.CharField(
+        max_length=200, blank=True, default="مدیریت", verbose_name="هزینه‌گذار"
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.CASCADE,

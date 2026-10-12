@@ -38,7 +38,8 @@ W_SAME_WEEKDAY_LAST_WEEK = 6.0  # any task on the same weekday last week
 W_WEEK_LOAD = 3.0               # tasks already assigned in the target week
 W_REUSE_CLEANING = 50.0         # breaking the strict rule (fallback only)
 
-COOKING_DAYS = (5, 6)  # Thursday(5), Friday(6) in Persian weekday numbering
+# NOTE: the cooking days/people are admin-configurable and come from
+# SiteSettings (defaults: Thursday(5) + Friday(6), 2 people each).
 
 
 class History:
@@ -77,8 +78,8 @@ def build_slots(week_start: date, settings: SiteSettings) -> list[tuple[date, in
             tasks.append(TaskType.CLEANING)
         if settings.vacuuming_enabled and offset in (settings.vacuum_days or []):
             tasks.extend([TaskType.VACUUMING] * int(settings.vacuum_people or 0))
-        if settings.cooking_enabled and offset in COOKING_DAYS:
-            tasks.extend([TaskType.COOKING] * 2)
+        if settings.cooking_enabled and offset in (settings.cooking_days or []):
+            tasks.extend([TaskType.COOKING] * int(settings.cooking_people or 0))
         days.append((d, offset, tasks))
 
     # Busiest days first (Friday = 5 slots): resolve the tight constraints

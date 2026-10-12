@@ -52,6 +52,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
     )
     shares = ExpenseShareSerializer(many=True, read_only=True)
     created_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M")
+    created_at_jalali = serializers.SerializerMethodField()
 
     class Meta:
         model = Expense
@@ -59,23 +60,46 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "total_amount",
+            "payer_name",
             "note",
             "created_by",
             "created_by_name",
             "created_at",
+            "created_at_jalali",
             "shares",
         ]
-        read_only_fields = ["id", "created_by", "created_at"]
+        read_only_fields = ["id", "created_by", "created_at", "payer_name"]
+
+    def get_created_at_jalali(self, obj):
+        from common.jalali import jalali_datetime
+
+        return jalali_datetime(obj.created_at)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        only_user = self.context.get("share_user")
+        if only_user is not None:
+            data["shares"] = [
+                s for s in data["shares"] if s.get("user") == only_user.id
+            ]
+        return data
 
 
 class ExpenseCreateSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=200)
     total_amount = serializers.IntegerField(min_value=1000)
     note = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    # Who paid: a roommate picked from the combo-box, or nothing → «مدیریت».
+    payer_name = serializers.CharField(
+        max_length=200, required=False, allow_blank=True, default="مدیریت"
+    )
     # Default: all active members; the client may remove some.
     member_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False
     )
+
+    def validate_payer_name(self, value):
+        return (value or "").strip() or "مدیریت"
 
     def validate_member_ids(self, value):
         from accounts.models import User

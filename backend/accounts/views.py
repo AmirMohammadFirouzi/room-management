@@ -1,6 +1,7 @@
 from django.contrib.auth import login, logout
 from rest_framework import generics, permissions, status
 from rest_framework.authtoken.models import Token
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -9,6 +10,8 @@ from .serializers import (
     AdminUserCreateSerializer,
     AdminUserUpdateSerializer,
     LoginSerializer,
+    MeUpdateSerializer,
+    RegisterSerializer,
     UserSerializer,
 )
 
@@ -38,6 +41,23 @@ class LoginView(APIView):
         return Response({"token": token.key, "user": UserSerializer(user).data})
 
 
+class RegisterView(APIView):
+    """Anyone may sign up, but always as a plain member."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        token, _ = Token.objects.get_or_create(user=user)
+        login(request, user)
+        return Response(
+            {"token": token.key, "user": UserSerializer(user).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class LogoutView(APIView):
     def post(self, request):
         Token.objects.filter(user=request.user).delete()
@@ -46,8 +66,18 @@ class LogoutView(APIView):
 
 
 class MeView(APIView):
+    """Read my profile (GET) or edit my own username/password (PATCH)."""
+
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = MeUpdateSerializer(
+            request.user, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(UserSerializer(user).data)
 
 
 class MemberListCreateView(generics.ListCreateAPIView):
@@ -84,7 +114,21 @@ class MemberDetailView(generics.RetrieveUpdateDestroyAPIView):
             return AdminUserUpdateSerializer
         return UserSerializer
 
+    def perform_update(self, serializer):
+        # The admin may not lock or demote their own account.
+        instance = serializer.instance
+        if instance is not None and instance == self.request.user:
+            if instance.is_active and not self.request.data.get("is_active", True):
+                raise PermissionDenied(
+                    "امکان غیرفعال کردن حساب خودتان وجود ندارد."
+                )
+            if instance.is_admin_role and self.request.data.get("role") == "member":
+                raise PermissionDenied(
+                    "امکان کم کردن دسترسی خودتان وجود ندارد."
+                )
+        super().perform_update(serializer)
+
     def perform_destroy(self, instance):
         if instance == self.request.user:
-            raise permissions.PermissionDenied("امکان حذف حساب خودتان وجود ندارد.")
+            raise PermissionDenied("امکان حذف حساب خودتان وجود ندارد.")
         instance.delete()

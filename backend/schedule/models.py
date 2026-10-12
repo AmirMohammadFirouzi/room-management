@@ -35,9 +35,56 @@ class TaskType(models.TextChoices):
     COOKING = "cooking", "آشپزی"
 
 
+class ScheduleStatus(models.TextChoices):
+    DRAFT = "draft", "پیش‌نویس"
+    PUBLISHED = "published", "منتشر شده"
+
+
 class SiteSettings(models.Model):
     """Singleton row holding the admin-configurable knobs."""
 
+    # --- branding (login page + header; editable by the admin) -------------
+    site_title = models.CharField(
+        max_length=120,
+        default="مدیریت اتاق مشترک",
+        verbose_name="عنوان سامانه",
+        help_text="عنوانی که در صفحه‌ی ورود و بالای برنامه نمایش داده می‌شود.",
+    )
+    site_logo = models.CharField(
+        max_length=20,
+        default="🏠",
+        blank=True,
+        verbose_name="لوگو (ایموجی یا چند حرف)",
+        help_text="یک اموجی یا حداکثر ۲ حرف؛ خالی بماند از آیکون پیش‌فرض استفاده می‌شود.",
+    )
+
+    # --- card-to-card payment target (shown as a 3D card) ------------------
+    bank_name = models.CharField(
+        max_length=80, default="بانک ملت", verbose_name="نام بانک"
+    )
+    bank_logo = models.CharField(
+        max_length=12, default="ملت", blank=True, verbose_name="لوگوی بانک"
+    )
+    brand_color = models.CharField(
+        max_length=20,
+        default="#1E40AF",
+        verbose_name="رنگ کارت",
+        help_text="رنگ HEX کارت بانکی، مثلا #1E40AF",
+    )
+    card_number = models.CharField(
+        max_length=24,
+        default="6104337812345678",
+        verbose_name="شماره کارت",
+        help_text="۱۶ رقم بدون فاصله.",
+    )
+    card_holder = models.CharField(
+        max_length=120,
+        default="اتاق مشترک",
+        blank=True,
+        verbose_name="صاحب کارت",
+    )
+
+    # --- task configuration ------------------------------------------------
     vacuum_days = models.JSONField(
         default=list,
         help_text="روزهای جاروبرقی؛ آرایه‌ای از اعداد ۰ (شنبه) تا ۶ (جمعه)",
@@ -45,6 +92,14 @@ class SiteSettings(models.Model):
     )
     vacuum_people = models.PositiveSmallIntegerField(
         default=2, verbose_name="تعداد نفرات جاروبرقی"
+    )
+    cooking_days = models.JSONField(
+        default=list,
+        help_text="روزهای آشپزی؛ آرایه‌ای از اعداد ۰ (شنبه) تا ۶ (جمعه)",
+        verbose_name="روزهای آشپزی",
+    )
+    cooking_people = models.PositiveSmallIntegerField(
+        default=2, verbose_name="تعداد نفرات آشپزی"
     )
     cleaning_enabled = models.BooleanField(default=True, verbose_name="فعال بودن نظافت")
     vacuuming_enabled = models.BooleanField(
@@ -67,15 +122,25 @@ class SiteSettings(models.Model):
     @classmethod
     def load(cls) -> "SiteSettings":
         obj, _ = cls.objects.get_or_create(pk=1)
+        changed = False
         if not obj.vacuum_days:
             # Default: Monday(2), Wednesday(4), Friday(6)
             obj.vacuum_days = [2, 4, 6]
-            obj.save(update_fields=["vacuum_days"])
+            changed = True
+        if not obj.cooking_days:
+            # Default: Thursday(5), Friday(6)
+            obj.cooking_days = [5, 6]
+            changed = True
+        if changed:
+            obj.save()
         return obj
 
 
 class WeeklySchedule(models.Model):
-    """One generated schedule for the week starting Saturday ``week_start``."""
+    """One generated schedule for the week starting Saturday ``week_start``.
+
+    It lives in draft mode until an admin explicitly publishes it.
+    """
 
     week_start = models.DateField(unique=True, verbose_name="شروع هفته (شنبه)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ایجاد")
@@ -86,6 +151,17 @@ class WeeklySchedule(models.Model):
         blank=True,
         related_name="generated_schedules",
         verbose_name="ایجادکننده",
+    )
+    # Draft or published.
+    schedule_status = models.CharField(
+        max_length=10,
+        choices=ScheduleStatus.choices,
+        default=ScheduleStatus.DRAFT,
+        verbose_name="وضعیت برنامه",
+    )
+    # When the schedule was first published (None while in draft).
+    published_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="زمان انتشار"
     )
 
     class Meta:
@@ -272,4 +348,63 @@ class SubstitutionCredit(models.Model):
     def __str__(self):
         state = "باز" if self.is_open else "تسویه‌شده"
         return f"{self.debtor} بدهکار {self.creditor} ({state})"
+
+
+class Notification(models.Model):
+    """Per-user notification; grouped into one general weekly notification."""
+
+    class Kind(models.TextChoices):
+        WEEK_SCHEDULE_PUBLISHED = "week_schedule_published", "برنامه‌ی هفته منتشر شد"
+        NEW_ASSIGNMENT = "new_assignment", "تکلیف جدید"
+        ASSIGNMENT_CONFIRMED = "assignment_confirmed", "تکلیف تأیید شد"
+        SUB_REJECTED = "sub_rejected", "درخواست جایگزینی رد شد"
+        PAYMENT_APPROVED = "payment_approved", "پرداخت شما تایید شد"
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        verbose_name="کاربر",
+    )
+    kind = models.CharField(
+        max_length=30, choices=Kind.choices, verbose_name="نوع اعلان"
+    )
+    message = models.CharField(max_length=400, verbose_name="متن اعلان")
+    data = models.JSONField(
+        default=dict, blank=True, verbose_name="دیتا اضافی (مثلا weekly week_start)"
+    )
+    is_read = models.BooleanField(default=False, verbose_name="خوانده‌شده")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان اعلان")
+
+    class Meta:
+        verbose_name = "اعلان"
+        verbose_name_plural = "اعلان‌ها"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "kind"], name="unique_last_notification_per_kind"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user} — {self.get_kind_display()}"
+
+    @classmethod
+    def notify(cls, user, kind: str, message: str, data: dict | None = None):
+        """Upsert one notification per (user, kind).
+
+        Because a row is unique per kind, publishing several consecutive weeks
+        refreshes a single «برنامه‌ی هفته منتشر شد» entry instead of piling up
+        duplicates — that is the "one general notification" behaviour.
+        """
+        return cls.objects.update_or_create(
+            user=user,
+            kind=kind,
+            defaults={"message": message, "data": data or {}, "is_read": False},
+        )[0]
+
+    @classmethod
+    def notify_many(cls, users, kind: str, message: str, data: dict | None = None):
+        """Same as :meth:`notify` for a queryset/list of users."""
+        return [cls.notify(u, kind, message, data) for u in users]
 

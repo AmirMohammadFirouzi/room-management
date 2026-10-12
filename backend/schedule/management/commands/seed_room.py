@@ -77,16 +77,24 @@ class Command(BaseCommand):
         )
 
     def _demo(self):
-        from schedule.models import WeeklySchedule
+        from schedule.models import ScheduleStatus, WeeklySchedule
 
         week_start = saturday_of(date.today())
-        if not WeeklySchedule.objects.filter(week_start=week_start).exists():
+        schedule = WeeklySchedule.objects.filter(week_start=week_start).first()
+        if schedule is None:
             admin_user = (
                 User.objects.filter(role=User.Role.ADMIN).first()
                 or User.objects.first()
             )
-            generate_schedule(week_start, admin_user)
+            schedule = generate_schedule(week_start, admin_user)
             self.stdout.write(self.style.SUCCESS("demo schedule generated"))
+        if schedule.schedule_status != ScheduleStatus.PUBLISHED:
+            import django.utils.timezone as tz
+
+            schedule.schedule_status = ScheduleStatus.PUBLISHED
+            schedule.published_at = tz.now()
+            schedule.save(update_fields=["schedule_status", "published_at"])
+            self.stdout.write(self.style.SUCCESS("demo schedule published"))
 
         # Sample expense split across everyone.
         if not Expense.objects.filter(title="مواد شوینده").exists():

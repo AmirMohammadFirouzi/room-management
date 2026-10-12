@@ -1,29 +1,33 @@
 from datetime import date, timedelta
 
-from django.db.models import Count, Q
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import generics, permissions, status
-from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import User
 from accounts.views import IsAdminRole
+from common.jalali import jalali_date
 from expenses.models import ExpenseShare, Payment
 from expenses.serializers import PaymentSerializer
 
 from .models import (
     Assignment,
+    Notification,
+    ScheduleStatus,
     SiteSettings,
     SubstitutionCredit,
     SubstitutionRequest,
     WeeklySchedule,
+    persian_weekday,
     saturday_of,
 )
 from .scheduler import generate_schedule, next_week_start
 from .serializers import (
     AssignmentSerializer,
     CreditSerializer,
+    NotificationSerializer,
     SiteSettingsSerializer,
     SubstitutionCreateSerializer,
     SubstitutionDecisionSerializer,
@@ -33,7 +37,7 @@ from .serializers import (
 
 
 class SettingsView(APIView):
-    """Members read; admin writes vacuum config and task toggles."""
+    """Members read; admin writes task config, branding and the bank card."""
 
     def get(self, request):
         return Response(SiteSettingsSerializer(SiteSettings.load()).data)
@@ -47,19 +51,32 @@ class SettingsView(APIView):
             SiteSettings.load(), data=request.data, partial=True
         )
         serializer.is_valid(raise_exception=True)
-
-        days = serializer.validated_data.get("vacuum_days", None)
-        if days is not None:
-            days = [int(d) for d in days]
-            if any(d < 0 or d > 6 for d in days):
-                raise ValidationError("روزها باید بین ۰ (شنبه) تا ۶ (جمعه) باشند.")
-            serializer.validated_data["vacuum_days"] = sorted(set(days))
         serializer.save()
         return Response(serializer.data)
 
 
+class PublicSiteView(APIView):
+    """Branding for the login page (no authentication required)."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        s = SiteSettings.load()
+        return Response(
+            {
+                "site_title": s.site_title,
+                "site_logo": s.site_logo,
+                "allow_registration": True,
+            }
+        )
+
+
 class ScheduleView(APIView):
-    """GET ?week=YYYY-MM-DD returns that week's schedule (defaults to current)."""
+    """GET ?week=YYYY-MM-DD returns that week's schedule (defaults to current).
+
+    Drafts are visible to admins only — until the admin publishes, the week is
+    not active for regular members (``exists: false`` + ``schedule_status``).
+    """
 
     def get(self, request):
         week_param = request.query_params.get("week")
@@ -86,16 +103,30 @@ class ScheduleView(APIView):
                 {
                     "week_start": week_start.isoformat(),
                     "exists": False,
+                    "schedule_status": None,
                     "assignments": [],
                 }
             )
+
+        is_draft = schedule.schedule_status == ScheduleStatus.DRAFT
+        if is_draft and not request.user.is_admin_role:
+            # Not published yet → the week is not active for regular members.
+            return Response(
+                {
+                    "week_start": week_start.isoformat(),
+                    "exists": False,
+                    "schedule_status": ScheduleStatus.DRAFT,
+                    "assignments": [],
+                }
+            )
+
         data = WeeklyScheduleSerializer(schedule).data
         data["exists"] = True
         return Response(data)
 
 
 class GenerateScheduleView(APIView):
-    """Admin: build next week's (or ?week=) schedule; ``replace`` to redo."""
+    """Admin: build next week's (or ?week=) schedule — it starts as a draft."""
 
     permission_classes = [permissions.IsAuthenticated, IsAdminRole]
 
@@ -115,6 +146,135 @@ class GenerateScheduleView(APIView):
         return Response(
             WeeklyScheduleSerializer(schedule).data, status=status.HTTP_201_CREATED
         )
+
+
+class PublishScheduleView(APIView):
+    """Admin: publish a draft → it becomes active and everyone is notified.
+
+    Notifications are upserted per user (one row per kind), so publishing
+    several consecutive weeks refreshes a single general notification instead
+    of stacking duplicates.
+    """
+
+    permission_classes = [permissions.IsAuthenticated, IsAdminRole]
+
+    def post(self, request):
+        week_param = request.data.get("week")
+        if week_param:
+            try:
+                week_start = saturday_of(date.fromisoformat(week_param))
+            except ValueError:
+                return Response(
+                    {"detail": "تاریخ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            week_start = saturday_of(date.today())
+
+        schedule = WeeklySchedule.objects.filter(week_start=week_start).first()
+        if not schedule:
+            return Response(
+                {"detail": "برای این هفته برنامه‌ای ساخته نشده است."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if schedule.schedule_status == ScheduleStatus.PUBLISHED:
+            return Response(
+                {"detail": "این برنامه قبلاً منتشر شده است."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        schedule.schedule_status = ScheduleStatus.PUBLISHED
+        schedule.published_at = timezone.now()
+        schedule.save(update_fields=["schedule_status", "published_at"])
+
+        message = (
+            f"برنامه‌ی هفته‌ی {jalali_date(week_start, weekday=True)} منتشر شد؛ "
+            "کارهای خود را در «برنامه» ببینید."
+        )
+        Notification.notify_many(
+            User.objects.filter(is_active=True, is_superuser=False),
+            Notification.Kind.WEEK_SCHEDULE_PUBLISHED,
+            message,
+            {"week_start": week_start.isoformat()},
+        )
+
+        return Response(WeeklyScheduleSerializer(schedule).data)
+
+
+class MoveAssignmentView(APIView):
+    """Admin: freely move a task to another person and/or date.
+
+    Used by the «ساخت برنامه این هفته» editor while the schedule is still a
+    draft. Confirmed (already done) tasks are locked.
+    """
+
+    permission_classes = [permissions.IsAuthenticated, IsAdminRole]
+
+    def post(self, request, pk):
+        try:
+            assignment = Assignment.objects.select_related("schedule").get(pk=pk)
+        except Assignment.DoesNotExist:
+            return Response(
+                {"detail": "تکلیف پیدا نشد."}, status=status.HTTP_404_NOT_FOUND
+            )
+        if assignment.status == Assignment.Status.CONFIRMED:
+            return Response(
+                {"detail": "تکلیف انجام‌شده قابل جابه‌جایی نیست."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        new_user_id = request.data.get("assigned_to")
+        new_date = request.data.get("date")
+        if new_user_id is None and new_date is None:
+            return Response(
+                {"detail": "چیزی برای جابه‌جایی ارسال نشده است."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target_date = assignment.date
+        if new_date is not None:
+            try:
+                target_date = date.fromisoformat(str(new_date))
+            except ValueError:
+                return Response(
+                    {"detail": "تاریخ نامعتبر است."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            week = assignment.schedule
+            if not (week.week_start <= target_date <= week.week_end):
+                return Response(
+                    {"detail": "تاریخ باید داخل همین هفته باشد."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        target_user = assignment.assigned_to
+        if new_user_id is not None:
+            try:
+                target_user = User.objects.get(
+                    pk=int(new_user_id), is_active=True, is_superuser=False
+                )
+            except (User.DoesNotExist, TypeError, ValueError):
+                return Response(
+                    {"detail": "عضو انتخاب‌شده معتبر نیست."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Integrity: nobody may hold two tasks on the same day (unless this
+        # very assignment is simply staying put).
+        clash = Assignment.objects.filter(
+            date=target_date, assigned_to=target_user
+        ).exclude(pk=assignment.pk)
+        if clash.exists():
+            return Response(
+                {"detail": f"{target_user.display_name} در این روز تکلیف دیگری دارد."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assignment.assigned_to = target_user
+        assignment.date = target_date
+        assignment.weekday = persian_weekday(target_date)
+        assignment.save(update_fields=["assigned_to", "date", "weekday"])
+
+        return Response(AssignmentSerializer(assignment).data)
 
 
 class MyAssignmentsView(APIView):
@@ -286,6 +446,16 @@ class SubstitutionDecisionView(APIView):
             req.decided_at = timezone.now()
             req.decided_by = request.user
             req.save()
+            Notification.notify(
+                req.requested_by,
+                Notification.Kind.SUB_REJECTED,
+                (
+                    f"درخواست جایگزینی شما برای "
+                    f"{jalali_date(req.assignment.date, weekday=True)} رد شد."
+                    + (f" دلیل: {req.reject_reason}" if req.reject_reason else "")
+                ),
+                {"substitution": req.id},
+            )
             return Response(SubstitutionRequestSerializer(req).data)
 
         if action != "approve":
@@ -410,6 +580,37 @@ class CreditLedgerView(APIView):
 
 
 # ---------------------------------------------------------------------------
+# Notifications (the Messages box + live badge counter)
+# ---------------------------------------------------------------------------
+class NotificationsView(APIView):
+    """My notifications, newest first, plus the unread count for the badge."""
+
+    def get(self, request):
+        mine = Notification.objects.filter(user=request.user)
+        return Response(
+            {
+                "unread_count": mine.filter(is_read=False).count(),
+                "items": NotificationSerializer(mine[:50], many=True).data,
+            }
+        )
+
+
+class MarkNotificationsReadView(APIView):
+    """Mark every notification (or just the given ids) as read."""
+
+    def post(self, request):
+        qs = Notification.objects.filter(user=request.user, is_read=False)
+        ids = request.data.get("ids")
+        if isinstance(ids, list) and ids:
+            qs = qs.filter(id__in=ids)
+        updated = qs.update(is_read=True)
+        remaining = Notification.objects.filter(
+            user=request.user, is_read=False
+        ).count()
+        return Response({"updated": updated, "unread_count": remaining})
+
+
+# ---------------------------------------------------------------------------
 # Dashboard + admin statistics
 # ---------------------------------------------------------------------------
 class DashboardView(APIView):
@@ -440,7 +641,18 @@ class DashboardView(APIView):
         pending_shares = my_shares.filter(
             status=ExpenseShare.Status.PENDING
         ).count()
-        unpaid_shares = my_shares.exclude(status=ExpenseShare.Status.PAID)
+
+        # A draft week is not active for regular members yet.
+        week_schedule = WeeklySchedule.objects.filter(week_start=week_start).first()
+        schedule_status = week_schedule.schedule_status if week_schedule else None
+        draft_hidden = (
+            week_schedule is not None
+            and schedule_status == ScheduleStatus.DRAFT
+            and not user.is_admin_role
+        )
+        if draft_hidden:
+            mine_week = Assignment.objects.none()
+            today_all = Assignment.objects.none()
 
         admin_queues = {}
         if user.is_admin_role:
@@ -477,19 +689,27 @@ class DashboardView(APIView):
                     ).count(),
                     **admin_queues,
                 },
-                "schedule_exists": WeeklySchedule.objects.filter(
-                    week_start=week_start
-                ).exists(),
+                "notifications_unread": Notification.objects.filter(
+                    user=user, is_read=False
+                ).count(),
+                "schedule_exists": week_schedule is not None and not draft_hidden,
+                "schedule_status": schedule_status,
             }
         )
 
 
 class StatsView(APIView):
-    """Admin: simple fairness statistics + full history."""
+    """Admin: fairness statistics, history **and** the full financial picture
+    (total expenses + every invoice)."""
 
     permission_classes = [permissions.IsAuthenticated, IsAdminRole]
 
     def get(self, request):
+        from django.db.models import Sum
+
+        from expenses.models import Expense
+        from expenses.serializers import ExpenseSerializer
+
         members = list(
             User.objects.filter(
                 is_active=True, is_superuser=False
@@ -498,6 +718,7 @@ class StatsView(APIView):
         per_member = []
         for m in members:
             qs = m.assignments
+            shares = list(ExpenseShare.objects.filter(user=m))
             per_member.append(
                 {
                     "user": m.id,
@@ -508,6 +729,17 @@ class StatsView(APIView):
                     "cooking": qs.filter(task_type="cooking").count(),
                     "total": qs.count(),
                     "confirmed": qs.filter(status="confirmed").count(),
+                    "share_total": sum(s.amount for s in shares),
+                    "share_paid": sum(
+                        s.amount
+                        for s in shares
+                        if s.status == ExpenseShare.Status.PAID
+                    ),
+                    "share_due": sum(
+                        s.amount
+                        for s in shares
+                        if s.status != ExpenseShare.Status.PAID
+                    ),
                 }
             )
 
@@ -515,6 +747,26 @@ class StatsView(APIView):
             "assignments__assigned_to"
         )[:12]
         from .serializers import WeeklyScheduleSerializer as WSS
+
+        # --- financials: total expenses + full invoice list ----------------
+        total_spent = (
+            Expense.objects.aggregate(v=Sum("total_amount"))["v"] or 0
+        )
+        total_paid = (
+            ExpenseShare.objects.filter(status=ExpenseShare.Status.PAID).aggregate(
+                v=Sum("amount")
+            )["v"]
+            or 0
+        )
+        total_pending = (
+            ExpenseShare.objects.filter(
+                status=ExpenseShare.Status.PENDING
+            ).aggregate(v=Sum("amount"))["v"]
+            or 0
+        )
+        invoices = Expense.objects.prefetch_related("shares__user", "shares__payments")[
+            :200
+        ]
 
         return Response(
             {
@@ -528,6 +780,14 @@ class StatsView(APIView):
                         status="pending"
                     ).count(),
                 },
+                "financial": {
+                    "total_spent": total_spent,
+                    "total_paid": total_paid,
+                    "total_pending": total_pending,
+                    "total_unpaid": total_spent - total_paid,
+                    "invoice_count": Expense.objects.count(),
+                },
+                "invoices": ExpenseSerializer(invoices, many=True).data,
             }
         )
 
