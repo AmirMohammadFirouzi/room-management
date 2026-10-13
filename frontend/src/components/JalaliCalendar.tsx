@@ -1,144 +1,208 @@
-import * as React from "react"
-import { gregorian_to_jalali, jalali_to_gregorian } from "@/lib/scr-jalali"
-import { fa } from "@/lib/utils"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-
-/** Jalali weekday index: 0 = شنبه ... 6 = جمعه */
-function jalaliWeekday(d: number): number {
-  // d assume [jy, jm, jd]; convert to gregorian and use JS day-of-week
-  const [gy, gm, gd] = d
-  const [gy2, gm2, gd2] = jalali_to_gregorian(gy, gm, gd)
-  return (new Date(gy2, gm2 - 1, gd2).getDay() + 2) % 7
-}
-
-/** Return days in a Jalali month `jm` of year `jy`. */
-function jalaliDaysInMonth(jy: number, jm: number): number {
-  // First day of next month (or next year), subtract 1.
-  const [gyNext, jmNext] = jm === 12 ? [jy + 1, 1] : [jy, jm + 1]
-  const [gy, jm2] = jalali_to_gregorian(jy, jm, 1)
-  const [, jm2Next, jd2Next] = jalali_to_gregorian(gyNext, jmNext, 1)
-  return jd2Next - 1
-}
+import * as React from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  WEEKDAY_SHORT,
+  dateToJalaliObj,
+  isoToJalali,
+  jalaliDaysInMonth,
+  jalaliMonthName,
+  jalaliToISO,
+  type JalaliDate,
+} from '@/lib/jalali'
+import { cn, fa } from '@/lib/utils'
 
 export interface JalaliCalendarProps {
-  value: { jy: number; jm: number; jd: number } | null
-  onChange: (d: { jy: number; jm: number; jd: number }) => void
-  /** Show the selected date in this month view. */
-  view?: { jy: number; jm: number } | null
-  /** Control the view: pass a Jalali date to jump there. */
-  viewDate?: { jy: number; jm: number } | null
-  /** If true, only allow past or today dates (e.g. forward date). */
-  disabledForward?: boolean
+  /** Currently selected date (Jalali), or null. */
+  value: JalaliDate | null
+  onChange: (d: JalaliDate) => void
+  /** Only allow picking dates on/after today. */
+  minToday?: boolean
+  /** Extra predicate: dates returning true are disabled. */
+  isDisabled?: (d: JalaliDate) => boolean
+  className?: string
 }
 
-/** یک تقویمJalali قابل استفاده مجدد. */
+function sameDay(a: JalaliDate | null, b: JalaliDate): boolean {
+  return !!a && a.jy === b.jy && a.jm === b.jm && a.jd === b.jd
+}
+
+function shiftMonth(view: { jy: number; jm: number }, delta: number) {
+  let { jy, jm } = view
+  jm += delta
+  while (jm < 1) {
+    jm += 12
+    jy -= 1
+  }
+  while (jm > 12) {
+    jm -= 12
+    jy += 1
+  }
+  return { jy, jm }
+}
+
+/** یک تقویم شمسی قابل استفاده‌ی مجدد (ماه/سال، امروز، انتخاب، غیرفعال). */
 export function JalaliCalendar({
   value,
   onChange,
-  view,
-  viewDate,
-  disabledForward = false,
+  minToday = false,
+  isDisabled,
+  className,
 }: JalaliCalendarProps) {
-  const [viewJ, setViewJ] = React.useState<{ jy: number; jm: number }>(
-    view ?? (viewDate ?? { jy: new Date().getFullYear(), jm: new Date().getMonth() + 1 })
-  )
-  const [selected, setSelected] = React.useState<{ jy: number; jm: number; jd: number } | null>(
-    value ?? null
-  )
+  const today = React.useMemo(() => dateToJalaliObj(new Date()), [])
+  const [view, setView] = React.useState(() => {
+    const base = value ?? today
+    return { jy: base.jy, jm: base.jm }
+  })
 
   React.useEffect(() => {
-    if (viewDate) {
-      setViewJ({ jy: viewDate.jy, jm: viewDate.jm })
-    }
-  }, [viewDate])
+    if (value) setView({ jy: value.jy, jm: value.jm })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value?.jy, value?.jm])
 
-  React.useEffect(() => {
-    setSelected(value)
-  }, [value])
+  const daysInMonth = jalaliDaysInMonth(view.jy, view.jm)
+  // Persian weekday index (0=شنبه) of the 1st of the viewed month.
+  const firstWeekday =
+    (new Date(jalaliToISO({ jy: view.jy, jm: view.jm, jd: 1 })).getDay() + 2) % 7
 
-  const jump = (dy: number, dm: number, dd: number) => {
-    const next = { jy: viewJ.jy + dy, jm: viewJ.jm + dm, jd: dd }
-    setViewJ(next)
-    onChange(next)
-    setSelected(next)
+  function disabled(d: JalaliDate): boolean {
+    if (minToday && jalaliToISO(d) < jalaliToISO(today)) return true
+    return isDisabled?.(d) ?? false
   }
-
-  const selectDay = (dy: number, dm: number, dd: number) => {
-    const isDisabled =
-      disabledForward && (dy > new Date().getDate() || (dy === new Date().getDate() && false))
-    if (disabledForward && (dy > new Date().getDate() || (dy === new Date().getDate() && mm > new Date().getMonth() + 1))) {
-      return
-    }
-    setSelected({ jy: viewJ.jy + dy, jm: viewJ.jm + dm, jd: dd })
-    onChange({ jy: viewJ.jy + dy, jm: viewJ.jm + dm, jd: dd })
-  }
-
-  const renderDays = () => {
-    const days: React.ReactNode[] = []
-    const today = new Date()
-    const weekDayLabels = [
-      "شنبه",
-      "یکشنبه",
-      "دوشنبه",
-      "سه‌شنبه",
-      "چهارشنبه",
-      "پنجشنبه",
-      "جمعه",
-    ]
-    for (let i = 0; i < 7; i++) {
-      days.push(
-        <div key={`label-${i}`} className="w-12 text-center text-[11px] font-semibold text-muted-foreground">
-          {weekDayLabels[i].charAt(0)}
-        </div>
-      )
-    }
-    for (let week = 0; week < 6; week++) {
-      for (let day = 0; day < 7; day++) {
-        days.push(<div key={`cell-${week}-${day}`} className="w-12 text-center text-sm" />)
-      }
-    }
-    return days
-  }
-
-  const today = new Date()
-  const weekDayLabels = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"]
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-display flex items-center gap-2">
-          <span className="inline-flex rounded-md bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
-            {fa(viewJ.jm)} {jalaliMonthNames(viewJ.jm)}
-          </span>
-          <span className="text-base font-bold">{fa(viewJ.jy)}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-7 gap-1 text-center">
-          {weekDayLabels.map((w) => (
-            <div key={w} className="text-[11px] font-semibold text-muted-foreground">
-              {w.charAt(0)}
-            </div>
-          ))}
-          {renderDays()}
-        </div>
-      </CardContent>
-    </Card>
+    <div className={cn('flex flex-col gap-2', className)}>
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          aria-label="ماه قبل"
+          onClick={() => setView((v) => shiftMonth(v, -1))}
+          className="flex size-8 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+        <p className="text-sm font-bold">
+          {jalaliMonthName(view.jm)}{' '}
+          <span className="text-muted-foreground">{fa(view.jy)}</span>
+        </p>
+        <button
+          type="button"
+          aria-label="ماه بعد"
+          onClick={() => setView((v) => shiftMonth(v, 1))}
+          className="flex size-8 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {WEEKDAY_SHORT.map((w, i) => (
+          <div
+            key={i}
+            className={cn(
+              'py-1 text-[11px] font-semibold text-muted-foreground',
+              i === 6 && 'text-warning',
+            )}
+          >
+            {w}
+          </div>
+        ))}
+        {Array.from({ length: firstWeekday }).map((_, i) => (
+          <div key={`pad-${i}`} />
+        ))}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const day: JalaliDate = { jy: view.jy, jm: view.jm, jd: i + 1 }
+          const off = disabled(day)
+          const isToday = sameDay(today, day)
+          const isSel = sameDay(value, day)
+          return (
+            <button
+              key={day.jd}
+              type="button"
+              disabled={off}
+              onClick={() => onChange(day)}
+              className={cn(
+                'flex aspect-square items-center justify-center rounded-control text-sm transition-colors',
+                isSel
+                  ? 'bg-brand font-bold text-brand-foreground shadow-control'
+                  : isToday
+                    ? 'border-line border-brand font-bold text-brand'
+                    : 'text-foreground hover:bg-accent',
+                off && 'cursor-not-allowed opacity-30 hover:bg-transparent',
+              )}
+            >
+              {fa(day.jd)}
+            </button>
+          )
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          setView({ jy: today.jy, jm: today.jm })
+          onChange(today)
+        }}
+        className="self-center rounded-control px-3 py-1.5 text-xs font-semibold text-brand transition-colors hover:bg-accent"
+      >
+        برو به امروز ({fa(today.jd)} {jalaliMonthName(today.jm)})
+      </button>
+    </div>
   )
 }
 
-const jalaliMonthNames: Record<number, string> = {
-  1: "فروردین",
-  2: "اردیبهشت",
-  3: "خرداد",
-  4: "تیر",
-  5: "مرداد",
-  6: "شهریور",
-  7: "مهر",
-  8: "آبان",
-  9: "آذر",
-  10: "دی",
-  11: "بهمن",
-  12: "اسفند",
+
+/** A date-picker field backed by JalaliCalendar (ISO value, Jalali display). */
+export function JalaliDateField({
+  value,
+  onChange,
+  minToday = false,
+  isDisabled,
+  label,
+  className,
+}: {
+  value: string // ISO YYYY-MM-DD
+  onChange: (iso: string) => void
+  minToday?: boolean
+  isDisabled?: (d: JalaliDate) => boolean
+  label?: string
+  className?: string
+}) {
+  const [open, setOpen] = React.useState(false)
+  const selected = React.useMemo(() => {
+    try {
+      return isoToJalali(value)
+    } catch {
+      return null
+    }
+  }, [value])
+
+  return (
+    <div className={cn('flex flex-col gap-1.5', className)}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label={label ?? 'انتخاب تاریخ'}
+        className="rounded-field border-line-field border-input bg-field px-3 text-start text-sm shadow-field transition-colors hover:border-ring/60"
+      >
+        <span className="block h-10 truncate leading-10">
+          {selected
+            ? `${fa(selected.jd)} ${jalaliMonthName(selected.jm)} ${fa(selected.jy)}`
+            : 'انتخاب تاریخ…'}
+        </span>
+      </button>
+      {open && (
+        <div className="rounded-surface border-line border-border bg-card p-3 shadow-surface">
+          <JalaliCalendar
+            value={selected}
+            minToday={minToday}
+            isDisabled={isDisabled}
+            onChange={(d) => {
+              onChange(jalaliToISO(d))
+              setOpen(false)
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
 }
