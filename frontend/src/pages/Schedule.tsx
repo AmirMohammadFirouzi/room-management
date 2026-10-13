@@ -16,7 +16,28 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, Input } from '@/components/ui/input'
-import { Avatar } from '@/components/ui/avatar'
+import { Avatar, AvatarGroup } from '@/components/ui/avatar'
+
+/** Group same-day/same-task rows: two vacuuming people share one box. */
+function groupDay(items: Assignment[], myId?: number) {
+  const groups = new Map<string, Assignment[]>()
+  for (const a of items) {
+    if (myId && a.assigned_to !== myId) continue
+    const key = `${a.task_type}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(a)
+  }
+  return [...groups.entries()].map(([task, list]) => ({
+    key: `${list[0].date}-${task}`,
+    names: list.map((a) => a.assignee_name),
+    people: list.map((a) => ({ name: a.assignee_name })),
+    label: list[0].task_label,
+    shared: list.length > 1,
+    mine: list.some((a) => myId && a.assigned_to === myId),
+    done: list.every((a) => a.status === 'confirmed'),
+    first: list.find((a) => !myId || a.assigned_to === myId) ?? list[0],
+  }))
+}
 
 /** Weekly schedule: 7 Jalali day-cards + a substitution request dialog. */
 export function SchedulePage() {
@@ -28,6 +49,7 @@ export function SchedulePage() {
   const [target, setTarget] = React.useState<Assignment | null>(null)
   const [reason, setReason] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const [myOnly, setMyOnly] = React.useState(false)
 
   const today = todayISO()
 
@@ -86,7 +108,7 @@ export function SchedulePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="font-display text-lg font-bold">برنامه‌ی هفتگی</h1>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" onClick={() => changeWeek(-1)} aria-label="هفته‌ی قبل">
@@ -98,8 +120,17 @@ export function SchedulePage() {
           <Button variant="ghost" size="icon" onClick={() => changeWeek(1)} aria-label="هفته‌ی بعد">
             <ChevronLeft className="size-4" />
           </Button>
+          <label className="ms-2 flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+            <input type="checkbox" checked={myOnly} onChange={(e) => setMyOnly(e.target.checked)} className="size-4" />
+            فقط وظایف من
+          </label>
         </div>
       </div>
+      {schedule?.schedule_status === 'draft' && user?.is_admin && (
+        <p className="rounded-control border border-warning px-3 py-2 text-center text-xs text-warning">
+          این برنامه هنوز پیش‌نویس است و برای اعضا فعال نیست — از «ساخت برنامه» منتشرش کنید.
+        </p>
+      )}
 
       {!schedule?.exists ? (
         <Card>
@@ -121,32 +152,32 @@ export function SchedulePage() {
                 {items.length === 0 && (
                   <p className="text-xs text-muted-foreground">بدون وظیفه</p>
                 )}
-                {items.map((a) => {
-                  const mine = user && a.assigned_to === user.id
-                  return (
-                    <div
-                      key={a.id}
-                      className={cn(
-                        'flex items-center gap-2 rounded-control px-2.5 py-2 text-sm',
-                        mine ? 'bg-secondary font-semibold' : 'bg-background',
-                      )}
-                    >
-                      <Avatar name={a.assignee_name} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <span className="block truncate">{a.assignee_name}</span>
-                        <span className="block text-xs text-muted-foreground">
-                          {a.task_label}
-                          {a.status === 'confirmed' ? ' · تأیید شد' : ''}
-                        </span>
-                      </div>
-                      {mine && a.status !== 'confirmed' && (
-                        <Button size="sm" variant="outline" onClick={() => void openSubstitute(a)}>
-                          <Repeat2 className="ms-1 size-3.5" /> جایگزین
-                        </Button>
-                      )}
+                {groupDay(items, myOnly ? user?.id : undefined).map((g) => (
+                  <div
+                    key={g.key}
+                    className={cn(
+                      'flex items-center gap-2 rounded-control px-2.5 py-2 text-sm',
+                      g.mine ? 'bg-secondary font-semibold' : 'bg-background',
+                    )}
+                  >
+                    <AvatarGroup people={g.people} size="sm" />
+                    <div className="min-w-0 flex-1 text-start">
+                      <span className="block truncate">
+                        {g.names.join(' و ')}
+                        {g.shared && <span className="ms-1 text-[11px] text-muted-foreground">(مسئولیت مشترک)</span>}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {g.label}
+                        {g.done ? ' · تأیید شد' : ''}
+                      </span>
                     </div>
-                  )
-                })}
+                    {g.mine && !g.done && g.first && (
+                      <Button size="sm" variant="outline" onClick={() => void openSubstitute(g.first)}>
+                        <Repeat2 className="ms-1 size-3.5" /> جایگزین
+                      </Button>
+                    )}
+                  </div>
+                ))}
               </CardContent>
             </Card>
           ))}

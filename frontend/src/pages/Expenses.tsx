@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { CreditCard, ReceiptText } from 'lucide-react'
 import { api } from '@/lib/api'
-import type { Balance, Expense, ExpenseShare } from '@/lib/types'
+import type { Balance, Expense, ExpenseShare, SiteSettings } from '@/lib/types'
 import { formatJalaliShort } from '@/lib/jalali'
 import { cn, en, fa, formatToman } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
@@ -10,6 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input, Field } from '@/components/ui/input'
+import { BankCard3D } from '@/components/BankCard3D'
+import { Icon3D } from '@/components/Icon3D'
+import { NumberInput } from '@/components/NumberInput'
 
 const SHARE_LABELS = {
   unpaid: 'پرداخت نشده',
@@ -35,10 +38,12 @@ export function ExpensesPage() {
   const [last4, setLast4] = React.useState('')
   const [showForm, setShowForm] = React.useState(false)
   const [title, setTitle] = React.useState('')
-  const [amount, setAmount] = React.useState('')
+  const [amount, setAmount] = React.useState<number | null>(null)
   const [note, setNote] = React.useState('')
+  const [payer, setPayer] = React.useState('')
   const [members, setMembers] = React.useState<{ id: number; display_name: string; is_active?: boolean }[]>([])
   const [selected, setSelected] = React.useState<number[]>([])
+  const [settings, setSettings] = React.useState<SiteSettings | null>(null)
   const [creating, setCreating] = React.useState(false)
 
   const load = React.useCallback(() => {
@@ -46,14 +51,16 @@ export function ExpensesPage() {
       api.get<Expense[]>('/expenses/'),
       api.get<Balance>('/expenses/balance/'),
       api.get<{ id: number; display_name: string; is_active?: boolean }[]>('/members/'),
+      api.get<SiteSettings>('/settings/').catch(() => null),
     ])
-      .then(([list, bal, mems]) => {
+      .then(([list, bal, mems, st]) => {
         setExpenses(list)
         setBalance(bal)
         // Only active roommates can share a new expense.
         const active = mems.filter((m) => m.is_active !== false)
         setMembers(active)
         setSelected((s) => (s.length === 0 ? active.map((m) => m.id) : s))
+        if (st) setSettings(st)
       })
       .catch((e: Error) => toast({ title: 'خطا', description: e.message, variant: 'error' }))
   }, [toast])
@@ -85,16 +92,22 @@ export function ExpensesPage() {
 
   async function createExpense(e: React.FormEvent) {
     e.preventDefault()
-    const total = Number(en(amount.trim()))
+    const total = amount ?? NaN
     if (!title.trim() || !Number.isFinite(total) || total < 1000) {
       toast({ title: 'نام و مبلغ معتبر وارد کنید', variant: 'error' })
       return
     }
     setCreating(true)
     try {
-      await api.post('/expenses/', { title: title.trim(), total_amount: Math.round(total), note, member_ids: selected.length > 0 ? selected : undefined })
+      await api.post('/expenses/', {
+        title: title.trim(),
+        total_amount: Math.round(total),
+        note,
+        payer_name: payer.trim() || 'مدیریت',
+        member_ids: selected.length > 0 ? selected : undefined,
+      })
       toast({ title: 'هزینه ثبت و تقسیم شد', variant: 'success' })
-      setTitle(''); setAmount(''); setNote(''); setShowForm(false)
+      setTitle(''); setAmount(null); setNote(''); setPayer(''); setShowForm(false)
       load()
     } catch (err) {
       toast({ title: 'خطا', description: (err as Error).message, variant: 'error' })
@@ -126,6 +139,16 @@ export function ExpensesPage() {
           </Card>
         </div>
       )}
+      {settings && (
+        <BankCard3D
+          bankName={settings.bank_name}
+          logoLabel={settings.bank_logo}
+          brandColor={settings.brand_color}
+          holderName={settings.card_holder}
+          cardNumber={settings.card_number}
+          subtitle="کارت مشترک اتاق — برای دنگ به این کارت بزنید"
+        />
+      )}
       {showForm && (
         <Card className="border-brand">
           <CardHeader className="pb-2"><CardTitle className="text-sm">هزینه جدید</CardTitle></CardHeader>
@@ -133,9 +156,24 @@ export function ExpensesPage() {
             <form onSubmit={createExpense} className="flex flex-col gap-3">
               <Field label="نام آیتم" htmlFor="ex-t"><Input id="ex-t" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثلا: خرید هفتگی" required /></Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="مبلغ (تومان)" htmlFor="ex-a"><Input id="ex-a" dir="ltr" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} required /></Field>
+                <Field label="مبلغ (تومان)" htmlFor="ex-a">
+                  <NumberInput id="ex-a" value={amount} onChange={setAmount} placeholder="۱٬۲۰۰٬۰۰۰" />
+                </Field>
                 <Field label="یادداشت" htmlFor="ex-n"><Input id="ex-n" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
               </div>
+              <Field label="چه کسی هزینه کرد؟ (خالی = مدیریت)" htmlFor="ex-p">
+                <select
+                  id="ex-p"
+                  value={payer}
+                  onChange={(e) => setPayer(e.target.value)}
+                  className="h-10 rounded-field border border-input bg-field px-3 text-sm"
+                >
+                  <option value="">مدیریت</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.display_name}>{m.display_name}</option>
+                  ))}
+                </select>
+              </Field>
               <div><p className="mb-1.5 text-sm">تقسیم بین ({fa(selected.length)} نفر)</p>
                 <div className="flex flex-wrap gap-1.5">{members.map((m) => (
                   <button key={m.id} type="button" onClick={() => toggleSel(m.id)} className={cn('rounded-control border px-2.5 py-1 text-xs', selected.includes(m.id) ? 'border-brand font-semibold' : 'border-border text-muted-foreground')}>{m.display_name}</button>
@@ -153,8 +191,13 @@ export function ExpensesPage() {
         return (
           <Card key={ex.id}>
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm"><ReceiptText className="size-4 text-brand" /> {ex.title}</CardTitle>
-              <p className="text-xs text-muted-foreground">{formatToman(ex.total_amount)} · {ex.created_by_name} · {formatJalaliShort(ex.created_at.slice(0, 10))}</p>
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Icon3D icon={ReceiptText} size="sm" />
+                {ex.title}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {formatToman(ex.total_amount)} · پرداخت‌کننده: {ex.payer_name || 'مدیریت'} · ثبت: {ex.created_by_name} · {formatJalaliShort(ex.created_at.slice(0, 10))}
+              </p>
             </CardHeader>
             <CardContent className="flex flex-col gap-1.5">
               {mine && (
@@ -170,7 +213,10 @@ export function ExpensesPage() {
                   {mine.payment && mine.status === 'pending' && <p className="w-full text-xs text-muted-foreground">کارت <span dir="ltr">···· {mine.payment.card_last4}</span> — در انتظار تأیید</p>}
                 </div>
               )}
-              <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">همه سهم‌ها ({fa(ex.shares.length)})</summary>
+              <details className="text-xs text-muted-foreground">
+                <summary className="cursor-pointer">
+                  {user?.is_admin ? `همه سهم‌ها (${fa(ex.shares.length)})` : 'جزئیات سهم من'}
+                </summary>
                 {ex.shares.map((s) => <p key={s.id} className="flex justify-between"><span>{s.user_name}</span><span>{formatToman(s.amount)} · {SHARE_LABELS[s.status]}</span></p>)}
               </details>
             </CardContent>

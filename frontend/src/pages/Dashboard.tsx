@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CalendarDays, Repeat2, Sparkles, Wallet } from 'lucide-react'
+import { CalendarDays, PartyPopper, Repeat2, Sparkles, Wallet } from 'lucide-react'
 import { useAuth } from '@/auth'
 import { api } from '@/lib/api'
 import { formatJalali, todayISO } from '@/lib/jalali'
@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TaskCard } from '@/components/TaskCard'
+import { Icon3D } from '@/components/Icon3D'
+import { NotificationsBox } from '@/components/Notifications'
 
 export function DashboardPage() {
   const { user } = useAuth()
@@ -78,51 +80,54 @@ export function DashboardPage() {
         </Card>
       )}
 
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-brand" />
-          <h2 className="text-sm font-bold">وظایف امروز من</h2>
+      <section className="grid gap-3 md:grid-cols-5">
+        <div className="flex flex-col gap-2 md:col-span-3">
+          <div className="flex items-center gap-2">
+            <Icon3D icon={Sparkles} size="sm" />
+            <h2 className="text-sm font-bold">وظایف امروز من</h2>
           {myToday.length > 0 && (
             <Badge variant="brand">{fa(myToday.length)} مورد</Badge>
           )}
+          </div>
+          {myToday.length === 0 ? (
+            <p className="rounded-control border-line border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
+              امروز وظیفه‌ای نداری — استراحت!
+            </p>
+          ) : (
+            myToday.map((a) => (
+              <TaskCard
+                key={a.id}
+                assignment={a}
+                showAssignee={false}
+                canConfirm
+                confirming={confirmingId === a.id}
+                onConfirm={confirm}
+                onSubstitute={() => navigate('/schedule')}
+              />
+            ))
+          )}
+          {restOfWeek.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h2 className="text-sm font-bold text-muted-foreground">
+                بقیه‌ی وظایف این هفته
+              </h2>
+              {restOfWeek.map((a) => (
+                <TaskCard
+                  key={a.id}
+                  assignment={a}
+                  showAssignee={false}
+                  canConfirm
+                  confirming={confirmingId === a.id}
+                  onConfirm={confirm}
+                />
+              ))}
+            </div>
+          )}
         </div>
-        {myToday.length === 0 ? (
-          <p className="rounded-control border-line border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
-            امروز وظیفه‌ای نداری — استراحت!
-          </p>
-        ) : (
-          myToday.map((a) => (
-            <TaskCard
-              key={a.id}
-              assignment={a}
-              showAssignee={false}
-              canConfirm
-              confirming={confirmingId === a.id}
-              onConfirm={confirm}
-              onSubstitute={() => navigate('/schedule')}
-            />
-          ))
-        )}
+        <div className="flex flex-col gap-3 md:col-span-2">
+          <NotificationsBox compact />
+        </div>
       </section>
-
-
-      {restOfWeek.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-bold text-muted-foreground">
-            بقیه‌ی وظایف این هفته
-          </h2>
-          {restOfWeek.map((a) => (
-            <TaskCard
-              key={a.id}
-              assignment={a}
-              showAssignee={false}
-              canConfirm
-              confirming={confirmingId === a.id}
-              onConfirm={confirm}
-            />
-          ))}
-        </section>
-      )}
 
       {data.today.length > 0 && (
         <section className="flex flex-col gap-2">
@@ -134,24 +139,29 @@ export function DashboardPage() {
       )}
 
       <section className="grid grid-cols-2 gap-3">
-        <Card className={cn(data.balance.unpaid_total > 0 && 'border-warning')}>
-          <CardHeader className="pb-1">
+        <Card className={cn('md:col-span-2', data.balance.unpaid_total > 0 && 'border-warning')}>
+          <CardHeader className="flex-row items-center gap-2 pb-1">
+            <Icon3D icon={Wallet} size="sm" tone="bg-warning text-white" />
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              بدهی من
+              بدهی باقی‌مانده من
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p
-              className={cn(
-                'font-display text-lg font-bold',
-                data.balance.unpaid_total > 0 ? 'text-warning' : 'text-success',
-              )}
-            >
-              {formatToman(data.balance.unpaid_total)}
-            </p>
-            <Link to="/expenses" className="text-xs text-brand hover:underline">
-              مشاهده‌ی هزینه‌ها
-            </Link>
+            {data.balance.unpaid_total > 0 ? (
+              <>
+                <p className="font-display text-xl font-bold text-warning">
+                  {formatToman(data.balance.unpaid_total)}
+                </p>
+                <Link to="/expenses" className="text-xs text-brand hover:underline">
+                  مشاهده‌ی هزینه‌ها
+                </Link>
+              </>
+            ) : (
+              <p className="flex items-center justify-center gap-2 py-1 text-center text-sm font-semibold text-success">
+                <PartyPopper className="size-5" />
+                حسابت صافه رفیق! بدهی نداری
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card className={cn(pendingTotal > 0 && 'border-brand')}>
