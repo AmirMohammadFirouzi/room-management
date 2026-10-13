@@ -14,7 +14,7 @@ export function MembersAdminPage() {
   const { toast } = useToast()
   const [members, setMembers] = React.useState<User[]>([])
   const [form, setForm] = React.useState({ username: '', password: '', display_name: '', role: 'member' })
-  const [editing, setEditing] = React.useState<User | null>(null)
+  const [editing, setEditing] = React.useState<(User & { password?: string }) | null>(null)
   const [busy, setBusy] = React.useState(false)
 
   const load = React.useCallback(() => {
@@ -38,7 +38,14 @@ export function MembersAdminPage() {
     if (!editing) return
     setBusy(true)
     try {
-      await api.patch(`/members/${editing.id}/`, { display_name: editing.display_name, role: editing.role, is_active: editing.is_active })
+      const body: Record<string, unknown> = {
+        username: editing.username,
+        display_name: editing.display_name,
+        role: editing.role,
+        is_active: editing.is_active,
+      }
+      if (editing.password?.trim()) body.password = editing.password.trim()
+      await api.patch(`/members/${editing.id}/`, body)
       toast({ title: 'ذخیره شد', variant: 'success' })
       setEditing(null); load()
     } catch (err) { toast({ title: 'خطا', description: (err as Error).message, variant: 'error' }) }
@@ -80,13 +87,15 @@ export function MembersAdminPage() {
           <div className="w-full max-w-md rounded-overlay border border-border bg-popover p-5" onClick={(e) => e.stopPropagation()}>
             <h2 className="font-bold">ویرایش {editing.display_name}</h2>
             <div className="mt-3 flex flex-col gap-3">
+              <Field label="نام کاربری" htmlFor="e-u"><Input id="e-u" dir="ltr" value={editing.username} onChange={(e) => setEditing({ ...editing, username: e.target.value })} /></Field>
               <Field label="نام نمایشی" htmlFor="e-d"><Input id="e-d" value={editing.display_name} onChange={(e) => setEditing({ ...editing, display_name: e.target.value })} /></Field>
+              <Field label="رمز عبور جدید (خالی = بدون تغییر)" htmlFor="e-p"><Input id="e-p" dir="ltr" type="password" value={editing.password ?? ''} onChange={(e) => setEditing({ ...editing, password: e.target.value })} /></Field>
               <Field label="نقش" htmlFor="e-r">
                 <select id="e-r" value={editing.role} onChange={(e) => setEditing({ ...editing, role: e.target.value as 'admin' | 'member' })} className="h-10 rounded-field border border-input bg-field px-3 text-sm">
                   <option value="member">عضو</option><option value="admin">مدیر</option>
                 </select>
               </Field>
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} className="size-4" /> فعال</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} className="size-4" /> فعال (برداشتن تیک = قفل حساب)</label>
               <div className="flex gap-2"><Button onClick={save} disabled={busy}>ذخیره</Button><Button variant="ghost" onClick={() => setEditing(null)}>انصراف</Button></div>
             </div>
           </div>

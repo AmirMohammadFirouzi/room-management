@@ -6,10 +6,13 @@ import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { cn } from '@/lib/utils'
+import { Field, Input } from '@/components/ui/input'
+import { BankCard3D } from '@/components/BankCard3D'
+import { cn, fa } from '@/lib/utils'
 
 // پیش‌فرض: دوشنبه (۲)، چهارشنبه (۴)، جمعه (۶) — شنبه = ۰
 const DEFAULT_VACUUM = [2, 4, 6]
+const DEFAULT_COOKING = [5, 6]
 
 export function SettingsAdminPage() {
   const { toast } = useToast()
@@ -25,6 +28,12 @@ export function SettingsAdminPage() {
     if (!s) return
     const has = s.vacuum_days.includes(d)
     setS({ ...s, vacuum_days: has ? s.vacuum_days.filter((x) => x !== d) : [...s.vacuum_days, d].sort() })
+  }
+
+  function toggleCookingDay(d: number) {
+    if (!s) return
+    const has = (s.cooking_days ?? []).includes(d)
+    setS({ ...s, cooking_days: has ? s.cooking_days.filter((x) => x !== d) : [...s.cooking_days, d].sort() })
   }
 
   async function save() {
@@ -64,6 +73,70 @@ export function SettingsAdminPage() {
             ))}
             <Button size="sm" variant="ghost" onClick={() => setS({ ...s, vacuum_days: DEFAULT_VACUUM, vacuum_people: 2 })}>بازنشانی پیش‌فرض</Button>
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">روزهای آشپزی ({fa((s.cooking_days ?? []).length)} روز)</CardTitle></CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2">
+            {WEEKDAY_LABELS.map((label, d) => (
+              <button key={d} type="button" onClick={() => toggleCookingDay(d)}
+                className={cn('rounded-control border px-3 py-1.5 text-sm', (s.cooking_days ?? []).includes(d) ? 'border-brand bg-brand text-brand-foreground font-semibold' : 'border-border text-muted-foreground')}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <span>تعداد نفر در هر روز:</span>
+            {[1, 2, 3].map((n) => (
+              <button key={n} type="button" onClick={() => setS({ ...s, cooking_people: n })}
+                className={cn('size-8 rounded-control border text-sm font-bold', s.cooking_people === n ? 'border-brand bg-brand text-brand-foreground' : 'border-border')}>
+                {fa(n)}
+              </button>
+            ))}
+            <Button size="sm" variant="ghost" onClick={() => setS({ ...s, cooking_days: DEFAULT_COOKING, cooking_people: 2 })}>بازنشانی پیش‌فرض</Button>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">عنوان و لوگوی ورود</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <Field label="عنوان سامانه" htmlFor="st-t">
+            <Input id="st-t" value={s.site_title} onChange={(e) => setS({ ...s, site_title: e.target.value })} />
+          </Field>
+          <Field label="لوگو (ایموجی یا ۲ حرف)" htmlFor="st-l">
+            <Input id="st-l" value={s.site_logo} onChange={(e) => setS({ ...s, site_logo: e.target.value })} />
+          </Field>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">کارت بانکی مشترک</CardTitle></CardHeader>
+        <CardContent className="flex-col flex gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="نام بانک" htmlFor="st-b">
+              <Input id="st-b" value={s.bank_name} onChange={(e) => setS({ ...s, bank_name: e.target.value })} />
+            </Field>
+            <Field label="لوگوی بانک" htmlFor="st-bl">
+              <Input id="st-bl" value={s.bank_logo} onChange={(e) => setS({ ...s, bank_logo: e.target.value })} />
+            </Field>
+            <Field label="صاحب کارت" htmlFor="st-h">
+              <Input id="st-h" value={s.card_holder} onChange={(e) => setS({ ...s, card_holder: e.target.value })} />
+            </Field>
+            <Field label="شماره کارت (۱۶ رقم)" htmlFor="st-c">
+              <Input id="st-c" dir="ltr" inputMode="numeric" value={s.card_number} onChange={(e) => setS({ ...s, card_number: e.target.value })} />
+            </Field>
+            <Field label="رنگ کارت" htmlFor="st-col">
+              <Input id="st-col" dir="ltr" value={s.brand_color} onChange={(e) => setS({ ...s, brand_color: e.target.value })} />
+            </Field>
+          </div>
+          <BankCard3D
+            bankName={s.bank_name}
+            logoLabel={s.bank_logo}
+            brandColor={s.brand_color}
+            holderName={s.card_holder}
+            cardNumber={s.card_number}
+            subtitle="کارت مشترک اتاق"
+          />
         </CardContent>
       </Card>
       <Card>
