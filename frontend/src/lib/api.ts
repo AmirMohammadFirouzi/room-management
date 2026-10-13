@@ -1,17 +1,32 @@
 /** Thin fetch-based API client. Token auth; JSON in/out. */
 
 const TOKEN_KEY = 'room_token'
+const SESSION_TOKEN_KEY = 'room_token_session'
 
 /** Online deployment: set VITE_API_URL (e.g. https://api.example.com). Local dev uses the Vite proxy. */
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(SESSION_TOKEN_KEY)
 }
 
-export function setToken(token: string | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
+/**
+ * Store the auth token. «مرا به خاطر بسپار» → localStorage (persistent);
+ * otherwise sessionStorage (gone when the tab closes).
+ */
+export function setToken(token: string | null, remember = true) {
+  if (!token) {
+    localStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem(SESSION_TOKEN_KEY)
+    return
+  }
+  if (remember) {
+    sessionStorage.removeItem(SESSION_TOKEN_KEY)
+    localStorage.setItem(TOKEN_KEY, token)
+  } else {
+    localStorage.removeItem(TOKEN_KEY)
+    sessionStorage.setItem(SESSION_TOKEN_KEY, token)
+  }
 }
 
 export class ApiError extends Error {

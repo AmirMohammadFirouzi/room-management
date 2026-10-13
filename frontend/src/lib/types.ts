@@ -24,6 +24,7 @@ export interface Assignment {
   id: number
   schedule: number
   date: string
+  date_jalali?: string
   weekday: number
   weekday_label: string
   task_type: TaskType
@@ -39,18 +40,40 @@ export interface Assignment {
   confirmed_at: string | null
 }
 
+export type ScheduleStatus = 'draft' | 'published'
+
 export interface WeeklySchedule {
   id: number
   week_start: string
+  week_start_jalali?: string
   created_at: string
+  created_at_jalali?: string
   created_by: number
+  schedule_status?: ScheduleStatus
+  published_at?: string | null
+  published_at_jalali?: string | null
   assignments: Assignment[]
   exists?: boolean
 }
 
+export interface SiteBranding {
+  site_title: string
+  site_logo: string
+  allow_registration: boolean
+}
+
 export interface SiteSettings {
+  site_title: string
+  site_logo: string
+  bank_name: string
+  bank_logo: string
+  brand_color: string
+  card_number: string
+  card_holder: string
   vacuum_days: number[]
   vacuum_people: number
+  cooking_days: number[]
+  cooking_people: number
   cleaning_enabled: boolean
   vacuuming_enabled: boolean
   cooking_enabled: boolean
@@ -67,6 +90,7 @@ export interface SubstitutionRequest {
   reason: string
   status: 'pending' | 'approved' | 'rejected'
   created_at: string
+  created_at_jalali?: string
   decided_at: string | null
   decided_by: number | null
   decided_by_name: string | null
@@ -89,6 +113,17 @@ export interface Credit {
   creditor_name: string
   created_at: string
   settled_at: string | null
+}
+
+export interface AppNotification {
+  id: number
+  kind: string
+  kind_label: string
+  message: string
+  data: Record<string, unknown>
+  is_read: boolean
+  created_at: string
+  created_at_jalali: string
 }
 
 export type ShareStatus = 'unpaid' | 'pending' | 'paid' | 'rejected'
@@ -122,10 +157,12 @@ export interface Expense {
   id: number
   title: string
   total_amount: number
+  payer_name: string
   note: string
   created_by: number
   created_by_name: string
   created_at: string
+  created_at_jalali?: string
   shares: ExpenseShare[]
 }
 
@@ -154,7 +191,9 @@ export interface DashboardData {
     pending_substitutions?: number
     pending_payments?: number
   }
+  notifications_unread?: number
   schedule_exists: boolean
+  schedule_status?: ScheduleStatus | null
 }
 
 export interface MemberStats {
@@ -166,6 +205,17 @@ export interface MemberStats {
   cooking: number
   total: number
   confirmed: number
+  share_total?: number
+  share_paid?: number
+  share_due?: number
+}
+
+export interface FinancialStats {
+  total_spent: number
+  total_paid: number
+  total_pending: number
+  total_unpaid: number
+  invoice_count: number
 }
 
 export interface Stats {
@@ -175,4 +225,6 @@ export interface Stats {
     pending_substitutions: number
     pending_payments: number
   }
+  financial?: FinancialStats
+  invoices?: Expense[]
 }

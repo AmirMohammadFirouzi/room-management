@@ -5,7 +5,8 @@ import type { User } from '@/lib/types'
 interface AuthState {
   user: User | null
   loading: boolean
-  login: (username: string, password: string) => Promise<void>
+  login: (username: string, password: string, remember?: boolean) => Promise<void>
+  register: (username: string, password: string, display_name: string) => Promise<void>
   logout: () => Promise<void>
   refresh: () => Promise<void>
 }
@@ -36,12 +37,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh])
 
   const login = React.useCallback(
-    async (username: string, password: string) => {
+    async (username: string, password: string, remember = true) => {
       const data = await api.post<{ token: string; user: User }>('/auth/login/', {
         username,
         password,
       })
-      setToken(data.token)
+      setToken(data.token, remember)
+      setUser(data.user)
+    },
+    [],
+  )
+
+  const register = React.useCallback(
+    async (username: string, password: string, display_name: string) => {
+      const data = await api.post<{ token: string; user: User }>('/auth/register/', {
+        username,
+        password,
+        display_name,
+      })
+      setToken(data.token, true)
       setUser(data.user)
     },
     [],
@@ -58,8 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const value = React.useMemo(
-    () => ({ user, loading, login, logout, refresh }),
-    [user, loading, login, logout, refresh],
+    () => ({ user, loading, login, register, logout, refresh }),
+    [user, loading, login, register, logout, refresh],
   )
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>
 }
