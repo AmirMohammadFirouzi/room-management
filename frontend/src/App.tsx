@@ -6,6 +6,7 @@ import { DashboardPage } from './pages/Dashboard'
 import { SchedulePage } from './pages/Schedule'
 import { SubstitutionsPage } from './pages/Substitutions'
 import { ExpensesPage } from './pages/Expenses'
+import { ProfilePage } from './pages/Profile'
 import { MembersAdminPage } from './pages/admin/Members'
 import { SettingsAdminPage } from './pages/admin/Settings'
 import { ApprovalsAdminPage } from './pages/admin/Approvals'
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/schedule" element={<SchedulePage />} />
         <Route path="/substitutions" element={<SubstitutionsPage />} />
         <Route path="/expenses" element={<ExpensesPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         {user.is_admin && (
           <>
             <Route path="/admin/members" element={<MembersAdminPage />} />

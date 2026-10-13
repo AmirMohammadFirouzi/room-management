@@ -1,24 +1,30 @@
 import * as React from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
+  BarChart3,
   CalendarDays,
+  CalendarPlus,
+  CheckCheck,
   Home,
   LogOut,
+  Menu,
   Moon,
   Repeat2,
   Settings,
   ShieldCheck,
   Sun,
+  UserRound,
   Users,
   Wallet,
-  BarChart3,
-  CheckCheck,
-  CalendarPlus,
+  X,
 } from 'lucide-react'
 import { cn, fa } from '@/lib/utils'
 import { useAuth } from '@/auth'
 import { useTheme } from '@/theme'
 import { useDashboard } from '@/hooks/useDashboard'
+import { useNotifications } from '@/hooks/useNotifications'
+import { api } from '@/lib/api'
+import type { SiteBranding } from '@/lib/types'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 
@@ -29,17 +35,25 @@ interface NavItem {
   badge?: number
   admin?: boolean
 }
-
-/** App shell: top bar on desktop, bottom tab bar on mobile (thumb-friendly). */
+/** App shell: top bar on desktop, bottom tab bar + «بیشتر» drawer on mobile. */
 export function Layout() {
   const { user, logout } = useAuth()
   const { theme, toggle } = useTheme()
   const { data } = useDashboard()
+  const { unread } = useNotifications()
   const navigate = useNavigate()
+  const [brand, setBrand] = React.useState<SiteBranding | null>(null)
+  const [menuOpen, setMenuOpen] = React.useState(false)
+  const [moreOpen, setMoreOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    api.get<SiteBranding>('/site/').then(setBrand).catch(() => undefined)
+  }, [])
 
   const pendingSubs = data?.pending.substitutions ?? 0
   const adminPending =
     (data?.pending.pending_substitutions ?? 0) + (data?.pending.pending_payments ?? 0)
+  const totalBadge = unread + pendingSubs + (user?.is_admin ? adminPending : 0)
 
   const items: NavItem[] = [
     { to: '/', label: 'داشبورد', icon: Home },
@@ -54,23 +68,45 @@ export function Layout() {
     { to: '/admin/settings', label: 'تنظیمات', icon: Settings, admin: true },
     { to: '/admin/stats', label: 'آمار', icon: BarChart3, admin: true },
   ]
+  const allItems = [...items, ...(user?.is_admin ? adminItems : [])]
+  const title = brand?.site_title ?? 'اتاق مشترک'
+  const logo = brand?.site_logo || ''
 
-  const mobileItems = user?.is_admin
-    ? [items[0], items[1], items[3], adminItems[0]]
-    : items
+  const mobileTabs: (NavItem | { more: true })[] = user?.is_admin
+    ? [
+        items[0],
+        items[1],
+        items[3],
+        { to: '/admin/approvals', label: 'تأییدها', icon: CheckCheck, badge: adminPending },
+        { more: true } as { more: true },
+      ]
+    : [...items, { more: true } as { more: true }]
+
+  function NavBadge({ n }: { n?: number }) {
+    if (!n) return null
+    return (
+      <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-brand-foreground">
+        {fa(n)}
+      </span>
+    )
+  }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col">
-      {/* Top bar */}
-      <header className="sticky top-0 z-50 border-line border-border bg-background/90 backdrop-blur">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="flex flex-1 items-center gap-2">
-            <ShieldCheck className="size-5 text-brand" />
-            <span className="font-display text-sm font-bold">اتاق مشترک</span>
-          </div>
-
-          {/* Desktop nav */}
-          <nav className="hidden items-center gap-1 md:flex">
+    <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col overflow-x-hidden">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur">
+        <div className="flex items-center gap-2 px-4 py-3">
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-2 text-start"
+            onClick={() => navigate('/')}
+            aria-label={title}
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-brand text-lg text-brand-foreground">
+              {logo ? <span aria-hidden>{logo}</span> : <ShieldCheck className="size-4" />}
+            </span>
+            <span className="truncate font-display text-sm font-bold">{title}</span>
+          </button>
+          <nav className="hidden items-center gap-1 lg:flex">
             {[...items, ...(user?.is_admin ? adminItems : [])].map((item) => (
               <NavLink
                 key={item.to}
@@ -78,7 +114,7 @@ export function Layout() {
                 end={item.to === '/'}
                 className={({ isActive }) =>
                   cn(
-                    'relative inline-flex items-center gap-1.5 rounded-control px-3 py-1.5 text-sm transition-colors',
+                    'relative inline-flex items-center gap-1.5 whitespace-nowrap rounded-control px-3 py-1.5 text-sm transition-colors',
                     isActive
                       ? 'bg-secondary font-semibold text-foreground'
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground',
@@ -87,75 +123,157 @@ export function Layout() {
               >
                 <item.icon className="size-4" />
                 {item.label}
+                <NavBadge n={item.badge} />
+              </NavLink>
+            ))}
+          </nav>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/profile')} aria-label="پروفایل">
+              <Avatar name={user?.display_name ?? ''} size="sm" />
+            </Button>
+            <span className="hidden max-w-28 truncate text-sm xl:inline">{user?.display_name}</span>
+            {totalBadge > 0 && (
+              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold leading-5 text-brand-foreground">
+                {fa(totalBadge)}
+              </span>
+            )}
+            <Button variant="ghost" size="icon" onClick={toggle} aria-label="تم">
+              {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMenuOpen((o) => !o)} aria-label="منو">
+              {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => { void logout().then(() => navigate('/login')) }} aria-label="خروج">
+              <LogOut className="size-4" />
+            </Button>
+          </div>
+        </div>
+        {menuOpen && (
+          <nav className="flex flex-wrap items-center gap-1 border-t border-border px-4 py-2 lg:hidden">
+            {allItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                onClick={() => setMenuOpen(false)}
+                className="inline-flex items-center gap-1.5 rounded-control px-3 py-1.5 text-sm text-muted-foreground"
+              >
+                <item.icon className="size-4" />
+                {item.label}
+                <NavBadge n={item.badge} />
+              </NavLink>
+            ))}
+            <NavLink
+              to="/profile"
+              onClick={() => setMenuOpen(false)}
+              className="inline-flex items-center gap-1.5 rounded-control px-3 py-1.5 text-sm text-muted-foreground"
+            >
+              <UserRound className="size-4" />
+              پروفایل من
+            </NavLink>
+          </nav>
+        )}
+      </header>
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-5 pb-28 md:pb-10">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 text-center md:mx-0 md:max-w-none md:text-start">
+          <Outlet />
+        </div>
+      </main>
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <div className="grid grid-cols-5">
+          {mobileTabs.map((tab, i) => {
+            if ('more' in tab) {
+              return (
+                <button
+                  key="more"
+                  type="button"
+                  onClick={() => setMoreOpen(true)}
+                  className="relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] text-muted-foreground"
+                >
+                  <span className="relative">
+                    <Menu className="size-5" />
+                    {totalBadge > 0 && (
+                      <span className="absolute -top-1 -start-1.5 inline-flex min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-brand-foreground">
+                        {fa(totalBadge)}
+                      </span>
+                    )}
+                  </span>
+                  بیشتر
+                </button>
+              )
+            }
+            return (
+              <NavLink
+                key={`${tab.to}-${i}`}
+                to={tab.to}
+                end={tab.to === '/'}
+                className={({ isActive }) =>
+                  cn(
+                    'relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] transition-colors',
+                    isActive ? 'font-semibold text-foreground' : 'text-muted-foreground',
+                  )
+                }
+              >
+                <span className="relative">
+                  <tab.icon className="size-5" />
+                  {tab.badge ? (
+                    <span className="absolute -top-1 -start-1.5 inline-flex min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-brand-foreground">
+                      {fa(tab.badge)}
+                    </span>
+                  ) : null}
+                </span>
+                {tab.label}
+              </NavLink>
+            )
+          })}
+        </div>
+      </nav>
+      {moreOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-4 md:hidden"
+          onClick={() => setMoreOpen(false)}
+        >
+          <div
+            className="flex max-h-[80dvh] w-full max-w-md flex-col gap-1 overflow-y-auto rounded-overlay border border-border bg-popover p-4 shadow-overlay"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-sm font-bold">همه بخش‌ها</p>
+              <Button variant="ghost" size="icon" onClick={() => setMoreOpen(false)} aria-label="بستن">
+                <X className="size-4" />
+              </Button>
+            </div>
+            {allItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                onClick={() => setMoreOpen(false)}
+                className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm hover:bg-accent"
+              >
+                <item.icon className="size-4 text-brand" />
+                <span className="flex-1 text-start">{item.label}</span>
                 {item.badge ? (
-                  <span className="inline-flex size-4 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-brand-foreground">
+                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold leading-5 text-brand-foreground">
                     {fa(item.badge)}
                   </span>
                 ) : null}
               </NavLink>
             ))}
-          </nav>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggle}
-              aria-label={theme === 'dark' ? 'حالت روشن' : 'حالت تاریک'}
+            <NavLink
+              to="/profile"
+              onClick={() => setMoreOpen(false)}
+              className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm hover:bg-accent"
             >
-              {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            </Button>
-            <div className="hidden items-center gap-2 md:flex">
-              <Avatar name={user?.display_name ?? ''} size="sm" />
-              <span className="max-w-28 truncate text-sm">{user?.display_name}</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                void logout().then(() => navigate('/login'))
-              }}
-              aria-label="خروج"
-            >
-              <LogOut className="size-4" />
-            </Button>
+              <UserRound className="size-4 text-brand" />
+              <span className="flex-1 text-start">پروفایل من</span>
+            </NavLink>
           </div>
         </div>
-      </header>
-
-      {/* Page content */}
-      <main className="flex-1 px-4 py-5 pb-24 md:pb-8">
-        <Outlet />
-      </main>
-
-      {/* Mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-line border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        <div className="grid grid-cols-4">
-          {mobileItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                cn(
-                  'relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] transition-colors',
-                  isActive ? 'font-semibold text-foreground' : 'text-muted-foreground',
-                )
-              }
-            >
-              <span className="relative">
-                <item.icon className="size-5" />
-                {item.badge ? (
-                  <span className="absolute -top-1 -start-1.5 inline-flex size-4 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-brand-foreground">
-                    {fa(item.badge)}
-                  </span>
-                ) : null}
-              </span>
-              {item.label}
-            </NavLink>
-          ))}
-        </div>
-      </nav>
+      )}
     </div>
   )
 }
+
