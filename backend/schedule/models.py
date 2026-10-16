@@ -57,6 +57,12 @@ class SiteSettings(models.Model):
         verbose_name="لوگو (ایموجی یا چند حرف)",
         help_text="یک اموجی یا حداکثر ۲ حرف؛ خالی بماند از آیکون پیش‌فرض استفاده می‌شود.",
     )
+    site_logo_image = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="تصویر لوگوی ورود",
+        help_text="تصویر آپلودشده به‌صورت data URL؛ خالی بماند از اموجی/حرف بالا استفاده می‌شود.",
+    )
 
     # --- card-to-card payment target (shown as a 3D card) ------------------
     bank_name = models.CharField(
@@ -64,6 +70,12 @@ class SiteSettings(models.Model):
     )
     bank_logo = models.CharField(
         max_length=12, default="ملت", blank=True, verbose_name="لوگوی بانک"
+    )
+    bank_logo_image = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="تصویر لوگوی بانک",
+        help_text="تصویر آپلودشده به‌صورت data URL؛ خالی بماند از متن لوگو استفاده می‌شود.",
     )
     brand_color = models.CharField(
         max_length=20,
@@ -359,6 +371,9 @@ class Notification(models.Model):
         ASSIGNMENT_CONFIRMED = "assignment_confirmed", "تکلیف تأیید شد"
         SUB_REJECTED = "sub_rejected", "درخواست جایگزینی رد شد"
         PAYMENT_APPROVED = "payment_approved", "پرداخت شما تایید شد"
+        WELCOME = "welcome", "خوش‌آمد گویی"
+        NEW_EXPENSE = "new_expense", "هزینه‌ی جدید"
+        ANNOUNCEMENT = "announcement", "اطلاعیه‌ی مدیر"
 
     user = models.ForeignKey(
         User,
@@ -368,6 +383,14 @@ class Notification(models.Model):
     )
     kind = models.CharField(
         max_length=30, choices=Kind.choices, verbose_name="نوع اعلان"
+    )
+    # Title shown as the headline of the message card.
+    title = models.CharField(
+        max_length=60, blank=True, verbose_name="عنوان اعلان"
+    )
+    # Short description/note giving the full details.
+    description = models.CharField(
+        max_length=280, blank=True, verbose_name="توضیح اعلان"
     )
     message = models.CharField(max_length=400, verbose_name="متن اعلان")
     data = models.JSONField(
@@ -380,28 +403,55 @@ class Notification(models.Model):
         verbose_name = "اعلان"
         verbose_name_plural = "اعلان‌ها"
         ordering = ["-created_at"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "kind"], name="unique_last_notification_per_kind"
-            )
-        ]
 
     def __str__(self):
         return f"{self.user} — {self.get_kind_display()}"
 
     @classmethod
     def notify(cls, user, kind: str, message: str, data: dict | None = None):
-        """Upsert one notification per (user, kind).
+        """Refresh one notification per (user, kind).
 
-        Because a row is unique per kind, publishing several consecutive weeks
-        refreshes a single «برنامه‌ی هفته منتشر شد» entry instead of piling up
-        duplicates — that is the "one general notification" behaviour.
+        The (user, kind) unique constraint was intentionally dropped so
+        history (announcements, welcome messages) can stack — so this helper
+        now refreshes the newest row of that kind and folds any older
+        duplicates into it, instead of relying on update_or_create.
+
+        The headline shown on the card is derived from the first line of the
+        message; the full text stays in `message` (and `description` where set).
         """
-        return cls.objects.update_or_create(
+        rows = cls.objects.filter(user=user, kind=kind).order_by("-id")
+        newest = rows.first()
+        if newest is not None:
+            title = (newest.title or "").strip()
+            if not title:
+                title = message.split("\n", 1)[0].strip()
+                if len(title) > 50:
+                    title = title[:47] + "…"
+            newest.title = title
+            newest.message = message
+            newest.description = newest.description or ""
+            newest.data = data or {}
+            newest.is_read = False
+            newest.save(
+                update_fields=[
+                    "title", "message", "description", "data", "is_read"
+                ]
+            )
+            rows.exclude(pk=newest.pk).delete()
+            return newest
+
+        title = message.split("\n", 1)[0].strip()
+        if len(title) > 50:
+            title = title[:47] + "…"
+        return cls.objects.create(
             user=user,
             kind=kind,
-            defaults={"message": message, "data": data or {}, "is_read": False},
-        )[0]
+            title=title,
+            message=message,
+            description="",
+            data=data or {},
+            is_read=False,
+        )
 
     @classmethod
     def notify_many(cls, users, kind: str, message: str, data: dict | None = None):

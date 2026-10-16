@@ -49,6 +49,7 @@ urlpatterns = [
         views.MarkNotificationsReadView.as_view(),
         name="notifications-read",
     ),
+    path("announcements/", views.AnnouncementView.as_view(), name="announcements"),
     path("dashboard/", views.DashboardView.as_view(), name="dashboard"),
     path("stats/", views.StatsView.as_view(), name="stats"),
 ]

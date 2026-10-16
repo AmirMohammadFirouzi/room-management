@@ -20,6 +20,12 @@ class AssignmentSerializer(serializers.ModelSerializer):
     assignee_avatar = serializers.CharField(
         source="assigned_to.avatar_text", read_only=True
     )
+    assignee_color = serializers.CharField(
+        source="assigned_to.avatar_bg", read_only=True
+    )
+    assignee_image = serializers.CharField(
+        source="assigned_to.avatar_image", read_only=True
+    )
     original_assignee_name = serializers.CharField(
         source="original_assignee.display_name", read_only=True, default=None
     )
@@ -44,6 +50,8 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "assigned_to",
             "assignee_name",
             "assignee_avatar",
+            "assignee_color",
+            "assignee_image",
             "original_assignee",
             "original_assignee_name",
             "is_substituted",
@@ -101,8 +109,10 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
         fields = [
             "site_title",
             "site_logo",
+            "site_logo_image",
             "bank_name",
             "bank_logo",
+            "bank_logo_image",
             "brand_color",
             "card_number",
             "card_holder",
@@ -152,6 +162,8 @@ class NotificationSerializer(serializers.ModelSerializer):
             "id",
             "kind",
             "kind_label",
+            "title",
+            "description",
             "message",
             "data",
             "is_read",
@@ -214,6 +226,16 @@ class SubstitutionCreateSerializer(serializers.Serializer):
 class SubstitutionDecisionSerializer(serializers.Serializer):
     reject_reason = serializers.CharField(
         max_length=255, required=False, allow_blank=True
+    )
+
+
+class AnnouncementSerializer(serializers.Serializer):
+    """Admin broadcasts a message to everyone or a selected subset."""
+
+    message = serializers.CharField(max_length=400)
+    # Empty/omitted → everyone; otherwise a list of user ids.
+    user_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False
     )
 
 

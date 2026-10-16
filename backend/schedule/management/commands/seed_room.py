@@ -39,6 +39,14 @@ class Command(BaseCommand):
             action="store_true",
             help="Also create a sample schedule, expense and substitution.",
         )
+        parser.add_argument(
+            "--reset-passwords",
+            action="store_true",
+            help=(
+                "Force every demo account (admin + roommates) back to the "
+                "default password and re-activate them. Never deletes data."
+            ),
+        )
 
     def handle(self, *args, **options):
         User = get_user_model()
@@ -63,6 +71,25 @@ class Command(BaseCommand):
 
         # --- one admin-role roommate (so the panel has a non-superuser admin) ---
         User.objects.filter(username="ali").update(role=User.Role.ADMIN)
+
+        # --- optional: restore demo access without touching any other data ---
+        if options["reset_passwords"]:
+            restored = 0
+            demo_usernames = ["admin"] + [u for u, _ in ROOMMATES]
+            for user in User.objects.filter(username__in=demo_usernames):
+                user.set_password(PASSWORD_DEFAULT)
+                update_fields = ["password"]
+                if not user.is_active:
+                    user.is_active = True
+                    update_fields.append("is_active")
+                user.save(update_fields=update_fields)
+                restored += 1
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"passwords reset to '{PASSWORD_DEFAULT}' for "
+                    f"{restored} demo account(s) (no data deleted)"
+                )
+            )
 
         SiteSettings.load()
         self.stdout.write(self.style.SUCCESS("settings initialised"))

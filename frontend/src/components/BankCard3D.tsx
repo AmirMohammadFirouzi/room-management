@@ -8,6 +8,8 @@ export interface BankCardProps {
   bankName: string
   /** Bank logo: a few letters or an emoji. */
   logoLabel: string
+  /** Optional uploaded bank logo image (data URL) — replaces the label. */
+  logoImage?: string
   /** Primary brand color as a hex string, e.g. «#1E40AF». */
   brandColor: string
   /** Account holder name. */
@@ -19,10 +21,11 @@ export interface BankCardProps {
   className?: string
 }
 
-/** Realistic 3D bank card: logo, brand color, holder and a copyable number. */
+/** Realistic 3D bank card: standard card size, logo, brand color, holder and a copyable number. */
 export function BankCard3D({
   bankName,
   logoLabel,
+  logoImage,
   brandColor,
   holderName,
   cardNumber,
@@ -58,13 +61,13 @@ export function BankCard3D({
   }
 
   return (
-    <div style={{ perspective: '900px' }} className={cn('w-full', className)}>
+    <div style={{ perspective: '900px' }} className={cn('mx-auto w-full max-w-[400px]', className)}>
       <div
         ref={ref}
         dir="ltr"
         onPointerMove={onMove}
         onPointerLeave={() => setTilt({ x: 0, y: 0 })}
-        className="relative aspect-[8/5] w-full overflow-hidden rounded-2xl text-white shadow-overlay transition-transform duration-150"
+        className="relative aspect-[1.586/1] w-full overflow-hidden rounded-2xl text-white shadow-overlay transition-transform duration-150"
         style={{
           transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
           transformStyle: 'preserve-3d',
@@ -100,8 +103,14 @@ export function BankCard3D({
           style={{ transform: 'translateZ(42px)' }}
         >
           <div className="flex items-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-white/15 text-sm font-black ring-1 ring-white/40 backdrop-blur">
-              {logoLabel || <CreditCard className="size-4" />}
+            <span className="flex size-9 items-center justify-center overflow-hidden rounded-xl bg-white/15 text-sm font-black ring-1 ring-white/40 backdrop-blur">
+              {logoImage ? (
+                <img src={logoImage} alt={bankName} className="size-full object-cover" />
+              ) : logoLabel ? (
+                logoLabel
+              ) : (
+                <CreditCard className="size-4" strokeWidth={1.75} />
+              )}
             </span>
             <span dir="rtl" className="text-sm font-bold drop-shadow">
               {bankName}

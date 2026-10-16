@@ -1,23 +1,49 @@
 import * as React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CalendarDays, PartyPopper, Repeat2, Sparkles, Wallet } from 'lucide-react'
+import { AlertCircle, LayoutGrid, ArrowLeftRight, Sparkles, Wallet } from 'lucide-react'
 import { useAuth } from '@/auth'
 import { api } from '@/lib/api'
 import { formatJalali, todayISO } from '@/lib/jalali'
 import { cn, fa, faNumber, formatToman } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { useDashboard } from '@/hooks/useDashboard'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { TaskCard } from '@/components/TaskCard'
-import { Icon3D } from '@/components/Icon3D'
 import { NotificationsBox } from '@/components/Notifications'
+
+/**
+ * First-load skeleton that mirrors the real bento structure (greeting +
+ * 3+2 grid + two action tiles) so the swap to real content causes no jump.
+ */
+function DashboardSkeleton() {
+  return (
+    <div className="flex min-h-[60dvh] flex-col gap-4" aria-busy="true">
+      <div className="h-8 w-44 animate-pulse rounded-control bg-muted" />
+      <div className="grid gap-3 md:grid-cols-5">
+        <div className="flex flex-col gap-2 md:col-span-3">
+          <div className="h-5 w-32 animate-pulse rounded bg-muted" />
+          <div className="h-36 animate-pulse rounded-surface bg-muted" />
+        </div>
+        <div className="flex flex-col gap-3">
+          <div className="h-16 animate-pulse rounded-surface bg-muted" />
+          <div className="h-16 animate-pulse rounded-surface bg-muted" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="h-20 animate-pulse rounded-surface bg-muted" />
+        <div className="h-20 animate-pulse rounded-surface bg-muted" />
+      </div>
+      <p className="text-center text-xs text-muted-foreground">در حال بارگذاری داشبورد…</p>
+    </div>
+  )
+}
 
 export function DashboardPage() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const { data, reload } = useDashboard()
+  const { data, error, loading, reload } = useDashboard()
   const [confirmingId, setConfirmingId] = React.useState<number | null>(null)
   const navigate = useNavigate()
 
@@ -42,14 +68,24 @@ export function DashboardPage() {
     }
   }
 
+  // No data yet: show a real error card (with retry) instead of an endless
+  // skeleton; otherwise show the structure-matching skeleton.
   if (!data) {
-    return (
-      <div className="flex flex-col gap-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-24 animate-pulse rounded-surface bg-muted" />
-        ))}
-      </div>
-    )
+    if (error && !loading) {
+      return (
+        <Card className="border-destructive">
+          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+            <AlertCircle className="size-6 text-destructive" strokeWidth={1.75} />
+            <p className="text-sm font-semibold">خطا در دریافت اطلاعات داشبورد</p>
+            <p className="max-w-sm text-xs text-muted-foreground">{error}</p>
+            <Button size="sm" onClick={reload}>
+              تلاش مجدد
+            </Button>
+          </CardContent>
+        </Card>
+      )
+    }
+    return <DashboardSkeleton />
   }
 
   const pendingTotal =
@@ -67,7 +103,7 @@ export function DashboardPage() {
       {!data.schedule_exists && (
         <Card className="border-warning">
           <CardContent className="flex items-center gap-3 py-4">
-            <CalendarDays className="size-5 shrink-0 text-warning" />
+            <LayoutGrid className="size-5 shrink-0 text-warning" strokeWidth={1.75} />
             <p className="flex-1 text-sm">
               برنامه‌ی این هفته هنوز ساخته نشده است. از مدیر بخواهید برنامه را بسازد.
             </p>
@@ -83,11 +119,11 @@ export function DashboardPage() {
       <section className="grid gap-3 md:grid-cols-5">
         <div className="flex flex-col gap-2 md:col-span-3">
           <div className="flex items-center gap-2">
-            <Icon3D icon={Sparkles} size="sm" />
+            <Sparkles className="size-4 shrink-0 text-brand" strokeWidth={1.75} />
             <h2 className="text-sm font-bold">وظایف امروز من</h2>
-          {myToday.length > 0 && (
-            <Badge variant="brand">{fa(myToday.length)} مورد</Badge>
-          )}
+            {myToday.length > 0 && (
+              <Badge variant="brand">{fa(myToday.length)} مورد</Badge>
+            )}
           </div>
           {myToday.length === 0 ? (
             <p className="rounded-control border-line border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
@@ -141,7 +177,7 @@ export function DashboardPage() {
       <section className="grid grid-cols-2 gap-3">
         <Card className={cn('md:col-span-2', data.balance.unpaid_total > 0 && 'border-warning')}>
           <CardHeader className="flex-row items-center gap-2 pb-1">
-            <Icon3D icon={Wallet} size="sm" tone="bg-warning text-white" />
+            <Wallet className="size-4 text-warning" strokeWidth={1.75} />
             <CardTitle className="text-xs font-medium text-muted-foreground">
               بدهی باقی‌مانده من
             </CardTitle>
@@ -157,8 +193,7 @@ export function DashboardPage() {
                 </Link>
               </>
             ) : (
-              <p className="flex items-center justify-center gap-2 py-1 text-center text-sm font-semibold text-success">
-                <PartyPopper className="size-5" />
+              <p className="py-1 text-center text-sm font-semibold text-success">
                 حسابت صافه رفیق! بدهی نداری
               </p>
             )}
@@ -193,7 +228,7 @@ export function DashboardPage() {
           className="h-auto justify-start gap-2 p-4"
           onClick={() => navigate('/substitutions')}
         >
-          <Repeat2 className="size-5 shrink-0 text-brand" />
+          <ArrowLeftRight className="size-5 shrink-0 text-brand" strokeWidth={1.75} />
           <span className="text-start">
             <span className="block text-sm font-semibold">درخواست جایگزینی</span>
             <span className="block text-xs font-normal text-muted-foreground">
@@ -208,7 +243,7 @@ export function DashboardPage() {
           className="h-auto justify-start gap-2 p-4"
           onClick={() => navigate('/expenses')}
         >
-          <Wallet className="size-5 shrink-0 text-brand" />
+          <Wallet className="size-5 shrink-0 text-brand" strokeWidth={1.75} />
           <span className="text-start">
             <span className="block text-sm font-semibold">هزینه‌ها و دنگ</span>
             <span className="block text-xs font-normal text-muted-foreground">

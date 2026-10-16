@@ -14,6 +14,18 @@ import { cn, fa } from '@/lib/utils'
 const DEFAULT_VACUUM = [2, 4, 6]
 const DEFAULT_COOKING = [5, 6]
 
+/** Read an image file as a data URL (≤512KB), wiring validation + toast inline. */
+function fileToDataUrl(file: File | undefined, set: (v: string) => void, onError?: (msg: string) => void): void {
+  if (!file) return
+  if (file.size > 512 * 1024) {
+    onError?.('حجم تصویر حداکثر ۵۱۲ کیلوبایت باشد')
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => set(String(reader.result ?? ''))
+  reader.readAsDataURL(file)
+}
+
 export function SettingsAdminPage() {
   const { toast } = useToast()
   const [s, setS] = React.useState<SiteSettings | null>(null)
@@ -100,13 +112,32 @@ export function SettingsAdminPage() {
       </Card>
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-sm">عنوان و لوگوی ورود</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          <Field label="عنوان سامانه" htmlFor="st-t">
-            <Input id="st-t" value={s.site_title} onChange={(e) => setS({ ...s, site_title: e.target.value })} />
+        <CardContent className="flex flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="عنوان سامانه" htmlFor="st-t">
+              <Input id="st-t" value={s.site_title} onChange={(e) => setS({ ...s, site_title: e.target.value })} />
+            </Field>
+            <Field label="لوگو (ایموجی یا ۲ حرف)" htmlFor="st-l">
+              <Input id="st-l" value={s.site_logo} onChange={(e) => setS({ ...s, site_logo: e.target.value })} />
+            </Field>
+          </div>
+          <Field label="تصویر لوگوی ورود (اختیاری، حداکثر ۵۱۲KB — جای ایموجی را می‌گیرد)" htmlFor="st-li">
+            <input
+              id="st-li"
+              type="file"
+              accept="image/*"
+              onChange={(e) => fileToDataUrl(e.target.files?.[0], (v) => setS({ ...s, site_logo_image: v }), (m) => toast({ title: m, variant: 'error' }))}
+              className="text-sm text-muted-foreground"
+            />
           </Field>
-          <Field label="لوگو (ایموجی یا ۲ حرف)" htmlFor="st-l">
-            <Input id="st-l" value={s.site_logo} onChange={(e) => setS({ ...s, site_logo: e.target.value })} />
-          </Field>
+          {s.site_logo_image && (
+            <div className="flex items-center gap-3">
+              <span className="flex size-14 items-center justify-center overflow-hidden rounded-2xl bg-brand">
+                <img src={s.site_logo_image} alt={s.site_title} className="size-full object-cover" />
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => setS({ ...s, site_logo_image: '' })}>حذف تصویر لوگو</Button>
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card>
@@ -128,10 +159,28 @@ export function SettingsAdminPage() {
             <Field label="رنگ کارت" htmlFor="st-col">
               <Input id="st-col" dir="ltr" value={s.brand_color} onChange={(e) => setS({ ...s, brand_color: e.target.value })} />
             </Field>
+            <Field label="تصویر لوگوی بانک (اختیاری، حداکثر ۵۱۲KB)" htmlFor="st-bi">
+              <input
+                id="st-bi"
+                type="file"
+                accept="image/*"
+                onChange={(e) => fileToDataUrl(e.target.files?.[0], (v) => setS({ ...s, bank_logo_image: v }), (m) => toast({ title: m, variant: 'error' }))}
+                className="text-sm text-muted-foreground"
+              />
+            </Field>
           </div>
+          {s.bank_logo_image && (
+            <div className="flex items-center gap-2">
+              <span className="flex size-9 items-center justify-center overflow-hidden rounded-xl bg-secondary">
+                <img src={s.bank_logo_image} alt={s.bank_name} className="size-full object-cover" />
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => setS({ ...s, bank_logo_image: '' })}>حذف تصویر لوگوی بانک</Button>
+            </div>
+          )}
           <BankCard3D
             bankName={s.bank_name}
             logoLabel={s.bank_logo}
+            logoImage={s.bank_logo_image || undefined}
             brandColor={s.brand_color}
             holderName={s.card_holder}
             cardNumber={s.card_number}

@@ -1,14 +1,15 @@
 import * as React from 'react'
-import { CalendarPlus, Megaphone, MoveRight } from 'lucide-react'
+import { CalendarPlus, ChevronLeft, ChevronRight, Megaphone, MoveRight } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { Assignment, User, WeeklySchedule } from '@/lib/types'
-import { addDaysISO, formatJalali, saturdayOf, toISO } from '@/lib/jalali'
-import { fa } from '@/lib/utils'
+import { addDaysISO, formatJalali, saturdayOf, toISO, todayISO } from '@/lib/jalali'
+import { cn, fa } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { Avatar } from '@/components/ui/avatar'
+import { WeekTable } from '@/pages/Schedule'
 
 /** ساخت برنامه این هفته (پیش‌نویس) → جابه‌جایی آزاد → انتشار. */
 export function ScheduleAdminPage() {
@@ -67,6 +68,32 @@ export function ScheduleAdminPage() {
 
   const isDraft = preview?.exists && preview?.schedule_status === 'draft'
   const isPublished = preview?.exists && preview?.schedule_status === 'published'
+  const adminUserIds = React.useMemo(() => {
+    const ids = [...new Set((preview?.assignments ?? []).map((a) => a.assigned_to))].sort((a, b) => a - b)
+    if (ids.length > 0) return ids
+    return members.filter((m) => m.is_active !== false).map((m) => m.id)
+  }, [preview, members])
+  const adminUsersById = React.useMemo(() => {
+    const m = new Map<number, User>()
+    for (const u of members) m.set(u.id, u)
+    for (const a of preview?.assignments ?? []) {
+      if (!m.has(a.assigned_to)) {
+        m.set(a.assigned_to, {
+          id: a.assigned_to,
+          username: '',
+          display_name: a.assignee_name,
+          avatar_text: a.assignee_avatar,
+          avatar_color: a.assignee_color ?? '',
+          avatar_bg: a.assignee_color ?? '',
+          avatar_image: a.assignee_image ?? '',
+          role: 'member',
+          is_admin: false,
+          is_active: true,
+        } as User)
+      }
+    }
+    return m
+  }, [members, preview])
 
   return (
     <div className="flex flex-col gap-4">
@@ -74,13 +101,34 @@ export function ScheduleAdminPage() {
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-sm">هفته هدف (شنبه)</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => setWeek(addDaysISO(week, -7))}>هفته قبل</Button>
-            <Button variant="outline" size="sm" onClick={() => setWeek(toISO(saturdayOf(new Date(new Date().getTime() + 7 * 864e5))))}>هفته بعد</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center rounded-control border border-border">
+              <Button size="icon" variant="ghost" className="h-9 w-9 rounded-e-none" onClick={() => setWeek(addDaysISO(week, -7))} aria-label="هفته‌ی قبل">
+                <ChevronRight className="size-4" />
+              </Button>
+              <span className="min-w-36 px-1 text-center text-sm font-semibold">
+                {week ? formatJalali(week, false) : '—'}
+              </span>
+              <Button size="icon" variant="ghost" className="h-9 w-9 rounded-s-none" onClick={() => setWeek(addDaysISO(week, 7))} aria-label="هفته‌ی بعد">
+                <ChevronLeft className="size-4" />
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setWeek(toISO(saturdayOf(new Date())))}
+              disabled={week === toISO(saturdayOf(new Date()))}
+            >
+              همین هفته
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setWeek(toISO(saturdayOf(new Date(new Date().getTime() + 7 * 864e5))))}
+            >
+              هفته‌ی بعد
+            </Button>
           </div>
-          <p className="rounded-field border border-input bg-field px-3 py-2 text-sm">
-            {week ? formatJalali(week) : '—'}
-          </p>
           <p className="text-sm text-muted-foreground">
             {preview?.exists ? `این هفته برنامه دارد (${fa(preview.assignments.length)} تکلیف).` : 'برای این هفته برنامه‌ای نیست.'}
           </p>
@@ -107,26 +155,38 @@ export function ScheduleAdminPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">
-              تکالیف هفته ({fa(preview.assignments.length)})
+              جدول هفته · {formatJalali(week, false)} ({fa(preview.assignments.length)})
               {isDraft && <Badge variant="warning" className="ms-2">پیش‌نویس</Badge>}
               {isPublished && <Badge variant="success" className="ms-2">منتشرشده</Badge>}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {preview.assignments.map((a) => (
-              <div key={a.id} className="flex items-center gap-2 rounded-control border border-border px-3 py-2 text-sm">
-                <Avatar name={a.assignee_name} size="sm" />
-                <div className="min-w-0 flex-1 text-start">
-                  <p className="truncate font-semibold">{a.assignee_name}</p>
-                  <p className="truncate text-xs text-muted-foreground">{a.task_label} · {formatJalali(a.date)}</p>
+          <CardContent>
+            <WeekTable
+              weekStartISO={week}
+              userIds={adminUserIds}
+              usersById={adminUsersById}
+              assignments={preview.assignments}
+              renderCell={({ date, items }) => (
+                <div className="flex flex-col gap-1">
+                  {items.map((a) => (
+                    <div
+                      key={a.id}
+                      className={cn(
+                        'flex items-center gap-1 rounded-control px-1.5 py-1 text-[11px]',
+                        date === todayISO() ? 'bg-brand/10 font-semibold' : 'bg-secondary',
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{a.task_label}</span>
+                      {isDraft && (
+                        <Button size="sm" variant="outline" className="h-6 px-1.5 text-[11px]" onClick={() => setMoving(a)}>
+                          <MoveRight className="size-3" strokeWidth={1.75} />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                {isDraft && (
-                  <Button size="sm" variant="outline" onClick={() => setMoving(a)}>
-                    <MoveRight className="ms-1 size-3.5" /> جابه‌جایی
-                  </Button>
-                )}
-              </div>
-            ))}
+              )}
+            />
           </CardContent>
         </Card>
       )}

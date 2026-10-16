@@ -1,6 +1,6 @@
 import * as React from 'react'
+import { Eye, EyeOff, Lock, LogIn, ShieldCheck, UserPlus, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { LogIn, ShieldCheck, UserPlus } from 'lucide-react'
 import { useAuth } from '@/auth'
 import { api } from '@/lib/api'
 import type { SiteBranding } from '@/lib/types'
@@ -22,6 +22,7 @@ export function LoginPage() {
   const [remember, setRemember] = React.useState(true)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState('')
+  const [showPassword, setShowPassword] = React.useState(false)
 
   React.useEffect(() => {
     api
@@ -53,13 +54,20 @@ export function LoginPage() {
 
   const title = brand?.site_title ?? 'خوش آمدید'
   const logo = brand?.site_logo || ''
+  const logoImage = brand?.site_logo_image || ''
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md items-center justify-center px-4 py-8">
       <Card className="w-full">
         <CardHeader className="items-center text-center">
-          <span className="mb-2 flex size-14 items-center justify-center rounded-2xl bg-brand text-2xl text-brand-foreground shadow-surface">
-            {logo ? <span aria-hidden>{logo}</span> : <ShieldCheck className="size-7" />}
+          <span className="mb-2 flex size-14 items-center justify-center overflow-hidden rounded-2xl bg-brand text-2xl text-brand-foreground shadow-surface">
+            {logoImage ? (
+              <img src={logoImage} alt={title} className="size-full object-cover" />
+            ) : logo ? (
+              <span aria-hidden>{logo}</span>
+            ) : (
+              <ShieldCheck className="size-7" strokeWidth={1.75} />
+            )}
           </span>
           <CardTitle className="font-display text-lg">{title}</CardTitle>
           <CardDescription>
@@ -73,6 +81,7 @@ export function LoginPage() {
                 id="username"
                 dir="ltr"
                 autoComplete="username"
+                startAddon={<UserRound className="size-4" strokeWidth={1.75} />}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -84,6 +93,7 @@ export function LoginPage() {
                 <Input
                   id="display-name"
                   autoComplete="name"
+                  startAddon={<UserRound className="size-4" strokeWidth={1.75} />}
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="مثلا: سینا خانی"
@@ -94,9 +104,25 @@ export function LoginPage() {
             <Field label={mode === 'login' ? 'رمز عبور' : 'رمز عبور (حداقل ۸ کاراکتر)'} htmlFor="password">
               <Input
                 id="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 dir="ltr"
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                startAddon={<Lock className="size-4" strokeWidth={1.75} />}
+                endAddon={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'پنهان کردن رمز' : 'نمایش رمز'}
+                    title={showPassword ? 'پنهان کردن رمز' : 'نمایش رمز'}
+                    className="rounded-control p-1 transition-colors hover:text-foreground"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="size-4" strokeWidth={1.75} />
+                    ) : (
+                      <Eye className="size-4" strokeWidth={1.75} />
+                    )}
+                  </button>
+                }
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

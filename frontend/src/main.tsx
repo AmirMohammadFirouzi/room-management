@@ -6,15 +6,18 @@ import App from './App'
 import { AuthProvider } from './auth'
 import { ThemeProvider } from './theme'
 import { ToastProvider } from './components/ui/toast'
+import { DashboardProvider } from './hooks/useDashboard'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <ToastProvider position="bottom-end">
-            <App />
-          </ToastProvider>
+          <DashboardProvider>
+            <ToastProvider position="bottom-end">
+              <App />
+            </ToastProvider>
+          </DashboardProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

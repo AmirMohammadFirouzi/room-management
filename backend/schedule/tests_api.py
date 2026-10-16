@@ -41,17 +41,32 @@ r = c.put("/api/settings/", {"vacuum_people": 3}, content_type="application/json
 assert r.status_code == 403
 print("settings write protected OK")
 
-# --- confirm a task as the assigned person ---
+# --- confirm a task as the assigned person (date-gated) -------------------
+# The rule: «Mark as Done» only becomes active on the exact day of the task.
+today = date.today()
 my = Assignment.objects.filter(
-    assigned_to__username="reza", status="pending"
-).first() or Assignment.objects.filter(status="pending").first()
+    assigned_to__username="reza", status="pending", date=today
+).first()
 if my is None:
-    print("confirm already done (nothing pending)")
+    print("confirm skipped (no pending task for reza today)")
 else:
     r = c.post(f"/api/assignments/{my.pk}/confirm/", **H)
     assert r.status_code == 200, r.content
     assert r.json()["status"] == "confirmed"
-    print("confirm OK")
+    print("confirm today OK")
+
+# an off-day pending task must be rejected by the date gate
+off = (
+    Assignment.objects.filter(assigned_to__username="reza", status="pending")
+    .exclude(date=today)
+    .first()
+)
+if off is None:
+    print("off-day gate skipped (no other pending reza task)")
+else:
+    r = c.post(f"/api/assignments/{off.pk}/confirm/", **H)
+    assert r.status_code == 400, (r.status_code, r.content)
+    print("off-day confirm blocked OK")
 
 # --- substitution flow: reza asks ali(?) no — pick someone free that day ---
 target = Assignment.objects.filter(

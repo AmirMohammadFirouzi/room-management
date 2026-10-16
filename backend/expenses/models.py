@@ -132,3 +132,76 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.share.user} — {self.amount} ({self.get_status_display()})"
+
+
+class Wallet(models.Model):
+    """Pre-loaded دنگ credit per member.
+
+    Members see only their own balance; the admin can see and top up all
+    wallets. Shares of an expense may be settled directly from the wallet.
+    """
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="wallet",
+        verbose_name="عضو",
+    )
+    balance = models.PositiveBigIntegerField(
+        default=0, verbose_name="موجودی (تومان)"
+    )
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="به‌روزرسانی")
+
+    class Meta:
+        verbose_name = "کیف پول"
+        verbose_name_plural = "کیف پول‌ها"
+
+    def __str__(self):
+        return f"{self.user}: {self.balance} تومان"
+
+    @classmethod
+    def get_balance(cls, user) -> int:
+        """Current balance (0 when the wallet row does not exist yet)."""
+        wallet = cls.objects.filter(user=user).first()
+        return wallet.balance if wallet else 0
+
+
+class WalletTransaction(models.Model):
+    """Ledger row for every wallet movement (audit trail)."""
+
+    class Kind(models.TextChoices):
+        TOPUP = "topup", "شارژ کیف پول"
+        EXPENSE = "expense", "پرداخت هزینه از کیف پول"
+        ADJUST = "adjust", "اصلاح دستی"
+
+    wallet = models.ForeignKey(
+        Wallet,
+        on_delete=models.CASCADE,
+        related_name="transactions",
+        verbose_name="کیف پول",
+    )
+    amount = models.IntegerField(
+        verbose_name="مبلغ (تومان؛ منفی = کسر)"
+    )
+    kind = models.CharField(
+        max_length=10, choices=Kind.choices, verbose_name="نوع"
+    )
+    note = models.CharField(max_length=255, blank=True, verbose_name="توضیح")
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wallet_actions",
+        verbose_name="ثبت‌کننده",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان")
+
+    class Meta:
+        verbose_name = "تراکنش کیف پول"
+        verbose_name_plural = "تراکنش‌های کیف پول"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        sign = "+" if self.amount >= 0 else ""
+        return f"{self.wallet.user} {sign}{self.amount} ({self.get_kind_display()})"

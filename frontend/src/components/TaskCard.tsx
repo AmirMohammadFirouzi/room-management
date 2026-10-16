@@ -1,14 +1,16 @@
-import { Check, ChefHat, Clock, Repeat2, Sparkles } from 'lucide-react'
+import { Check, Repeat2 } from 'lucide-react'
 import type { Assignment } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { formatJalali } from '@/lib/jalali'
+import { formatJalali, todayISO } from '@/lib/jalali'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Avatar } from '@/components/ui/avatar'
 
-const TASK_ICONS = {
-  cleaning: Sparkles,
-  vacuuming: Clock,
-  cooking: ChefHat,
+/** Minimal task-type glyphs: one neutral stroke icon per task, no 3D clutter. */
+export const TASK_GLYPHS = {
+  cleaning: 'نظافت',
+  vacuuming: 'جاروبرقی',
+  cooking: 'آشپزی',
 } as const
 
 const TASK_TONES = {
@@ -28,7 +30,11 @@ export interface TaskCardProps {
   confirming?: boolean
 }
 
-/** One assignment row: task icon, Jalali date, assignee, status, actions. */
+/**
+ * One assignment row: minimal glyph, Jalali date, assignee, status, actions.
+ * The «تأیید انجام» button stays disabled until the exact day of the task
+ * (backend enforces the same rule; admins bypass it).
+ */
 export function TaskCard({
   assignment,
   showAssignee = true,
@@ -37,8 +43,9 @@ export function TaskCard({
   onSubstitute,
   confirming = false,
 }: TaskCardProps) {
-  const Icon = TASK_ICONS[assignment.task_type]
   const done = assignment.status === 'confirmed'
+  const isToday = assignment.date === todayISO()
+  const confirmLocked = canConfirm && !isToday
 
   return (
     <div
@@ -49,11 +56,12 @@ export function TaskCard({
     >
       <span
         className={cn(
-          'flex size-9 shrink-0 items-center justify-center rounded-control bg-secondary',
+          'flex size-9 shrink-0 items-center justify-center rounded-control bg-secondary text-sm font-bold',
           TASK_TONES[assignment.task_type],
         )}
+        aria-hidden
       >
-        <Icon className="size-4.5" />
+        {assignment.task_label.slice(0, 1)}
       </span>
 
       <div className="min-w-0 flex-1">
@@ -64,7 +72,7 @@ export function TaskCard({
           )}
           {assignment.is_substituted && (
             <Badge variant="warning">
-              <Repeat2 className="ms-1 size-3" /> جایگزینی
+              <Repeat2 className="ms-1 size-3" strokeWidth={1.75} /> جایگزینی
             </Badge>
           )}
         </div>
@@ -75,12 +83,21 @@ export function TaskCard({
           )}
           {formatJalali(assignment.date)}
           {done && ' · تأیید شد'}
+          {!done && confirmLocked && ' · فقط در روز تکلیف فعال می‌شود'}
         </p>
       </div>
 
+      <Avatar
+        name={assignment.assignee_name}
+        src={assignment.assignee_image || undefined}
+        color={assignment.assignee_color || undefined}
+        size="sm"
+        className="hidden sm:inline-flex"
+      />
+
       {done ? (
         <Badge variant="success">
-          <Check className="ms-1 size-3" /> انجام شد
+          <Check className="ms-1 size-3" strokeWidth={1.75} /> انجام شد
         </Badge>
       ) : (
         <div className="flex shrink-0 items-center gap-1.5">
@@ -88,7 +105,8 @@ export function TaskCard({
             <Button
               size="sm"
               variant="success"
-              disabled={confirming}
+              disabled={confirming || confirmLocked}
+              title={confirmLocked ? 'دکمه‌ی تأیید فقط در روز خودِ تکلیف فعال می‌شود' : 'تأیید انجام'}
               onClick={() => onConfirm(assignment.id)}
             >
               تأیید انجام

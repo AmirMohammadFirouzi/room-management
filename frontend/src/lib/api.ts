@@ -49,7 +49,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 401) {
     setToken(null)
-    if (!path.startsWith('/auth/login')) {
+    // Only bounce to the login page when actually needed — parallel requests
+    // can401 together, and re-assigning the URL mid-render unmounts the app.
+    if (!path.startsWith('/auth/login') && window.location.pathname !== '/login') {
       window.location.href = '/login'
     }
   }

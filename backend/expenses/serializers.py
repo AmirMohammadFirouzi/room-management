@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
 
-from .models import Expense, ExpenseShare, Payment
+from .models import Expense, ExpenseShare, Payment, Wallet, WalletTransaction
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -97,6 +97,9 @@ class ExpenseCreateSerializer(serializers.Serializer):
     member_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False
     )
+    # When true, every share is deducted from the member's wallet and marked
+    # paid immediately (instead of the card-to-card «پرداخت جداگانه» flow).
+    pay_from_wallet = serializers.BooleanField(required=False, default=False)
 
     def validate_payer_name(self, value):
         return (value or "").strip() or "مدیریت"
@@ -124,7 +127,72 @@ class PaymentCreateSerializer(serializers.Serializer):
     )
 
 
+class BulkPaymentCreateSerializer(serializers.Serializer):
+    """Pay several of my own unpaid shares at once with a single card claim."""
+
+    share_ids = serializers.ListField(
+        child=serializers.IntegerField(), allow_empty=False
+    )
+    card_last4 = serializers.RegexField(
+        regex=r"^\d{4}$",
+        error_messages={"invalid": "۴ رقم آخر کارت را وارد کنید."},
+    )
+
+
 class PaymentDecisionSerializer(serializers.Serializer):
     reject_reason = serializers.CharField(
         max_length=255, required=False, allow_blank=True
     )
+
+
+class WalletTransactionSerializer(serializers.ModelSerializer):
+    created_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M")
+
+    class Meta:
+        model = WalletTransaction
+        fields = ["id", "amount", "kind", "note", "created_by", "created_at"]
+        read_only_fields = fields
+
+
+class WalletSerializer(serializers.ModelSerializer):
+    user = serializers.IntegerField(source="user_id", read_only=True)
+    user_name = serializers.CharField(
+        source="user.display_name", read_only=True
+    )
+    avatar_text = serializers.CharField(
+        source="user.avatar_text", read_only=True
+    )
+    avatar_color = serializers.CharField(
+        source="user.avatar_bg", read_only=True
+    )
+    avatar_image = serializers.CharField(
+        source="user.avatar_image", read_only=True
+    )
+
+    class Meta:
+        model = Wallet
+        fields = [
+            "user",
+            "user_name",
+            "avatar_text",
+            "avatar_color",
+            "avatar_image",
+            "balance",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class WalletTopupSerializer(serializers.Serializer):
+    """Admin credits (positive) or corrects (negative) one member's wallet."""
+
+    user_id = serializers.IntegerField()
+    amount = serializers.IntegerField()
+    note = serializers.CharField(
+        max_length=255, required=False, allow_blank=True
+    )
+
+    def validate_amount(self, value):
+        if value == 0:
+            raise serializers.ValidationError("مبلغ نمی‌تواند صفر باشد.")
+        return value

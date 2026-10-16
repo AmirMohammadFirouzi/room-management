@@ -6,12 +6,14 @@ import { DashboardPage } from './pages/Dashboard'
 import { SchedulePage } from './pages/Schedule'
 import { SubstitutionsPage } from './pages/Substitutions'
 import { ExpensesPage } from './pages/Expenses'
+import { WalletPage } from './pages/Wallet'
 import { ProfilePage } from './pages/Profile'
 import { MembersAdminPage } from './pages/admin/Members'
 import { SettingsAdminPage } from './pages/admin/Settings'
 import { ApprovalsAdminPage } from './pages/admin/Approvals'
 import { ScheduleAdminPage } from './pages/admin/ScheduleAdmin'
 import { StatsAdminPage } from './pages/admin/Stats'
+import { AnnounceAdminPage } from './pages/admin/Announce'
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -40,6 +42,7 @@ export default function App() {
         <Route path="/schedule" element={<SchedulePage />} />
         <Route path="/substitutions" element={<SubstitutionsPage />} />
         <Route path="/expenses" element={<ExpensesPage />} />
+        <Route path="/wallet" element={<WalletPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         {user.is_admin && (
           <>
@@ -48,6 +51,7 @@ export default function App() {
             <Route path="/admin/approvals" element={<ApprovalsAdminPage />} />
             <Route path="/admin/schedule" element={<ScheduleAdminPage />} />
             <Route path="/admin/stats" element={<StatsAdminPage />} />
+            <Route path="/admin/announce" element={<AnnounceAdminPage />} />
           </>
         )}
         <Route path="*" element={<Navigate to="/" replace />} />

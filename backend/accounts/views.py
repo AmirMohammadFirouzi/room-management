@@ -52,10 +52,26 @@ class RegisterView(APIView):
         user = serializer.save()
         token, _ = Token.objects.get_or_create(user=user)
         login(request, user)
+        _send_welcome(user)
         return Response(
             {"token": token.key, "user": UserSerializer(user).data},
             status=status.HTTP_201_CREATED,
         )
+
+
+def _send_welcome(user) -> None:
+    """Drop a welcome message into the new member's inbox."""
+    from schedule.models import Notification
+
+    Notification.notify(
+        user,
+        Notification.Kind.WELCOME,
+        (
+            f"به اتاق مشترک خوش آمدی {user.display_name}! 🎉 "
+            "برنامه‌ی هفتگی، جایگزینی و دنگ همین‌جا مدیریت می‌شود."
+        ),
+        {"user": user.id},
+    )
 
 
 class LogoutView(APIView):
@@ -96,6 +112,10 @@ class MemberListCreateView(generics.ListCreateAPIView):
         if self.request.method == "POST":
             return AdminUserCreateSerializer
         return UserSerializer
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        _send_welcome(user)
 
 
 class MemberDetailView(generics.RetrieveUpdateDestroyAPIView):

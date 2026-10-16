@@ -7,6 +7,7 @@ from .models import User
 
 class UserSerializer(serializers.ModelSerializer):
     is_admin = serializers.BooleanField(source="is_admin_role", read_only=True)
+    avatar_bg = serializers.CharField(read_only=True)
 
     class Meta:
         model = User
@@ -15,13 +16,16 @@ class UserSerializer(serializers.ModelSerializer):
             "username",
             "display_name",
             "avatar_text",
+            "avatar_color",
+            "avatar_bg",
+            "avatar_image",
             "role",
             "is_admin",
             "is_active",
             "first_name",
             "last_name",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "avatar_bg"]
 
 
 class AdminUserCreateSerializer(serializers.ModelSerializer):
@@ -47,10 +51,21 @@ class AdminUserCreateSerializer(serializers.ModelSerializer):
 
 class AdminUserUpdateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    avatar_color = serializers.CharField(required=False, allow_blank=True)
+    avatar_image = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "password", "display_name", "role", "is_active"]
+        fields = [
+            "id",
+            "username",
+            "password",
+            "display_name",
+            "role",
+            "is_active",
+            "avatar_color",
+            "avatar_image",
+        ]
 
     def validate_password(self, value):
         if value:
@@ -127,10 +142,22 @@ class MeUpdateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True, required=False, allow_blank=True, min_length=8
     )
+    # Avatar customisation (colour / short text / uploaded image).
+    avatar_color = serializers.CharField(required=False, allow_blank=True)
+    avatar_text = serializers.CharField(required=False, allow_blank=True, max_length=10)
+    avatar_image = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = User
-        fields = ["username", "display_name", "password", "current_password"]
+        fields = [
+            "username",
+            "display_name",
+            "password",
+            "current_password",
+            "avatar_color",
+            "avatar_text",
+            "avatar_image",
+        ]
 
     def validate_username(self, value):
         value = value.strip()

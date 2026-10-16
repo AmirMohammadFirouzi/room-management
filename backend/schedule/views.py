@@ -25,6 +25,7 @@ from .models import (
 )
 from .scheduler import generate_schedule, next_week_start
 from .serializers import (
+    AnnouncementSerializer,
     AssignmentSerializer,
     CreditSerializer,
     NotificationSerializer,
@@ -66,6 +67,7 @@ class PublicSiteView(APIView):
             {
                 "site_title": s.site_title,
                 "site_logo": s.site_logo,
+                "site_logo_image": s.site_logo_image,
                 "allow_registration": True,
             }
         )
@@ -324,6 +326,16 @@ class ConfirmAssignmentView(APIView):
         if not allowed:
             return Response(
                 {"detail": "فقط مسئول تکلیف می‌تواند آن را تأیید کند."}, status=403
+            )
+        # "Mark as done" only becomes available on the exact day of the task.
+        # (An admin may still correct a record on any day.)
+        if (
+            assignment.assigned_to_id == request.user.id
+            and assignment.date != date.today()
+        ):
+            return Response(
+                {"detail": "فقط در روز خودِ تکلیف می‌توانید آن را تأیید کنید."},
+                status=400,
             )
         if assignment.status == Assignment.Status.CONFIRMED:
             return Response({"detail": "این تکلیف قبلاً تأیید شده است."}, status=400)
@@ -695,6 +707,62 @@ class DashboardView(APIView):
                 "schedule_exists": week_schedule is not None and not draft_hidden,
                 "schedule_status": schedule_status,
             }
+        )
+
+
+class AnnouncementView(APIView):
+    """Admin broadcasts a message to every member or a selected subset.
+
+    Each recipient gets their own inbox row (history is kept), unlike the
+    schedule-publish notification which intentionally collapses to one entry.
+    """
+
+    permission_classes = [permissions.IsAuthenticated, IsAdminRole]
+
+    def post(self, request):
+        title = request.data.get("title", "").strip()
+        if not title:
+            return Response(
+                {"detail": "عنوان اعلان الزامی است."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        description = request.data.get("description", "").strip()
+        message = request.data.get("message", "").strip()
+        if not message:
+            return Response(
+                {"detail": "متن اعلان الزامی است."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = AnnouncementSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        message = serializer.validated_data["message"].strip()
+        user_ids = serializer.validated_data.get("user_ids") or []
+
+        users = User.objects.filter(is_active=True, is_superuser=False)
+        if user_ids:
+            users = users.filter(id__in=user_ids)
+        users = list(users)
+
+        payload = {
+            "title": title,
+            "description": description or message,
+            "message": message,
+        }
+        Notification.objects.bulk_create(
+            [
+                Notification(
+                    user=u,
+                    kind=Notification.Kind.ANNOUNCEMENT,
+                    title=title,
+                    description=description or message,
+                    message=message,
+                    data={"admin": request.user.id, "title": title},
+                )
+                for u in users
+            ]
+        )
+        return Response(
+            {"sent": len(users), "title": title, "payload": payload}
         )
 
 

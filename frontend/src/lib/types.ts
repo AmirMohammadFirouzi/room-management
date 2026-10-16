@@ -5,6 +5,9 @@ export interface User {
   username: string
   display_name: string
   avatar_text: string
+  avatar_color: string
+  avatar_bg: string
+  avatar_image: string
   role: 'admin' | 'member'
   is_admin: boolean
   is_active: boolean
@@ -32,6 +35,8 @@ export interface Assignment {
   assigned_to: number
   assignee_name: string
   assignee_avatar: string
+  assignee_color?: string
+  assignee_image?: string
   original_assignee: number | null
   original_assignee_name: string | null
   /** True when someone replaced the original assignee (derived client-side). */
@@ -59,14 +64,17 @@ export interface WeeklySchedule {
 export interface SiteBranding {
   site_title: string
   site_logo: string
+  site_logo_image: string
   allow_registration: boolean
 }
 
 export interface SiteSettings {
   site_title: string
   site_logo: string
+  site_logo_image: string
   bank_name: string
   bank_logo: string
+  bank_logo_image: string
   brand_color: string
   card_number: string
   card_holder: string
@@ -119,11 +127,18 @@ export interface AppNotification {
   id: number
   kind: string
   kind_label: string
+  title?: string
+  description?: string
   message: string
   data: Record<string, unknown>
   is_read: boolean
   created_at: string
   created_at_jalali: string
+}
+
+export interface AnnouncementResult {
+  sent: number
+  message: string
 }
 
 export type ShareStatus = 'unpaid' | 'pending' | 'paid' | 'rejected'
@@ -173,6 +188,29 @@ export interface Balance {
   rejected_total: number
   unpaid_total: number
   others_owed_to_me: number
+}
+
+export interface WalletTransaction {
+  id: number
+  amount: number
+  kind: 'topup' | 'expense' | 'adjust'
+  note: string
+  created_by: number | null
+  created_at: string
+}
+
+export interface WalletEntry {
+  id: number
+  user: number
+  user_name?: string
+  balance: number
+}
+
+export interface WalletData {
+  balance: number
+  transactions: WalletTransaction[]
+  all?: WalletEntry[]
+  all_total?: number
 }
 
 export interface DashboardData {
