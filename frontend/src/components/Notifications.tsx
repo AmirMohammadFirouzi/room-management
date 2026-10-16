@@ -1,53 +1,53 @@
-import * as React from 'react'
-import { Bell, CheckCheck, Inbox } from 'lucide-react'
-import { markAllRead, useNotifications } from '@/hooks/useNotifications'
-import { api } from '@/lib/api'
-import { cn, fa } from '@/lib/utils'
-import type { AppNotification } from '@/lib/types'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { NotificationModal } from './NotificationModal'
+import * as React from "react";
+import { Bell, CheckCheck, Inbox } from "lucide-react";
+import { markAllRead, useNotifications } from "@/hooks/useNotifications";
+import { api } from "@/lib/api";
+import { cn, fa } from "@/lib/utils";
+import type { AppNotification } from "@/lib/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { NotificationModal } from "./NotificationModal";
 
 /** جعبه‌ی پیام‌ها: ارتفاع ثابت هم‌تراز با جعبه‌های همسایه، لیست داخل آن
  *  اسکرول‌پذیر. هر ردیف فقط عنوان + نوع/زمان را نشان می‌دهد؛ کلیک → مودال
  *  کامل (متن کامل) + علامت‌گذاری خوانده‌شده. */
 export function NotificationsBox({ compact = false }: { compact?: boolean }) {
-  const { unread, items, reload } = useNotifications()
-  const [busy, setBusy] = React.useState(false)
-  const [openItem, setOpenItem] = React.useState<AppNotification | null>(null)
+  const { unread, items, reload } = useNotifications();
+  const [busy, setBusy] = React.useState(false);
+  const [openItem, setOpenItem] = React.useState<AppNotification | null>(null);
 
   async function readAll() {
-    setBusy(true)
+    setBusy(true);
     try {
-      await markAllRead()
-      reload()
+      await markAllRead();
+      reload();
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function readOne(id: number) {
-    setBusy(true)
+    setBusy(true);
     try {
-      await api.post<{ unread_count: number }>('/notifications/read/', {
+      await api.post<{ unread_count: number }>("/notifications/read/", {
         ids: [id],
-      })
-      reload()
+      });
+      reload();
     } catch {
       // اتصال قطع شد — آخرین وضعیت شناخته‌شده حفظ می‌شود.
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
-  const shown = compact ? items.slice(0, 8) : items
+  const shown = compact ? items.slice(0, 8) : items;
 
   return (
     <Card
       className={cn(
-        'flex min-h-0 flex-col overflow-hidden',
-        compact ? 'h-72' : 'max-h-[26rem]',
-        unread > 0 && 'border-brand',
+        "relative flex h-72 min-h-0 min-w-0 flex-col overflow-hidden",
+        compact ? "md:h-full md:min-h-[18rem]" : "max-h-[26rem]",
+        unread > 0 && "border-brand",
       )}
     >
       <CardHeader className="flex-row items-center justify-between pb-2">
@@ -61,10 +61,19 @@ export function NotificationsBox({ compact = false }: { compact?: boolean }) {
             )}
           </span>
           پیام‌ها
-          {unread > 0 && <span className="text-xs font-medium text-muted-foreground">({fa(unread)} خوانده‌نشده)</span>}
+          {unread > 0 && (
+            <span className="text-xs font-medium text-muted-foreground">
+              ({fa(unread)} خوانده‌نشده)
+            </span>
+          )}
         </CardTitle>
         {unread > 0 && (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void readAll()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => void readAll()}
+          >
             <CheckCheck className="ms-1 size-3.5" /> خواندم
           </Button>
         )}
@@ -76,20 +85,21 @@ export function NotificationsBox({ compact = false }: { compact?: boolean }) {
           </p>
         ) : (
           shown.map((n) => {
-            const [head] = n.message.split('\n')
-            const title = (n.title || head || '').trim()
-            const titleDisplay = title.length > 60 ? `${title.slice(0, 58)}…` : title
+            const [head] = n.message.split("\n");
+            const title = (n.title || head || "").trim();
+            const titleDisplay =
+              title.length > 60 ? `${title.slice(0, 58)}…` : title;
             return (
               <button
                 key={n.id}
                 type="button"
                 onClick={() => {
-                  void readOne(n.id)
-                  setOpenItem(n)
+                  void readOne(n.id);
+                  setOpenItem(n);
                 }}
                 className={cn(
-                  'w-full shrink-0 overflow-hidden rounded-control border border-line px-3 py-2 text-start transition hover:-translate-y-0.5 hover:border-brand/60 hover:bg-brand/5',
-                  !n.is_read && 'border-brand/60 bg-brand/5 font-medium',
+                  "w-full shrink-0 overflow-hidden rounded-control border border-line px-3 py-2 text-start transition hover:-translate-y-0.5 hover:border-brand/60 hover:bg-brand/5",
+                  !n.is_read && "border-brand/60 bg-brand/5 font-medium",
                 )}
               >
                 <p className="truncate text-sm font-semibold" title={title}>
@@ -99,7 +109,7 @@ export function NotificationsBox({ compact = false }: { compact?: boolean }) {
                   {n.kind_label} · {n.created_at_jalali}
                 </p>
               </button>
-            )
+            );
           })
         )}
       </CardContent>
@@ -110,6 +120,5 @@ export function NotificationsBox({ compact = false }: { compact?: boolean }) {
         />
       )}
     </Card>
-  )
+  );
 }
-

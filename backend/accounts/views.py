@@ -31,13 +31,13 @@ class IsAdminRole(permissions.BasePermission):
 
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
+    authentication_classes = []
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
         token, _ = Token.objects.get_or_create(user=user)
-        login(request, user)
         return Response({"token": token.key, "user": UserSerializer(user).data})
 
 
