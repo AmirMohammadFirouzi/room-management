@@ -1,9 +1,38 @@
+import re
+
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
+
+
+USERNAME_RE = re.compile(r"^[A-Za-z0-9@.+\-_]+$")
+
+
+def validate_username(value: str) -> str:
+    """Latin-only usernames (existing Django rule); Persian letters rejected."""
+    if not USERNAME_RE.match(value or ""):
+        raise DjangoValidationError(
+            "نام کاربری فقط می‌تواند شامل حروف انگلیسی (A–Z)، اعداد و"
+            " کاراکترهای . + - _ @ باشد.",
+            code="invalid_username",
+        )
+    return value
 
 
 class User(AbstractUser):
     """Room member with one of two roles: admin or member."""
+
+    username = models.CharField(
+        "نام کاربری",
+        max_length=150,
+        unique=True,
+        help_text=(
+            "فقط حروف انگلیسی (A–Z)، اعداد و کاراکترهای . + - _ @ مجاز است؛"
+            " حروف فارسی پذیرفته نمی‌شود."
+        ),
+        validators=[AbstractUser.username_validator],
+        error_messages={"unique": "A user with that username already exists."},
+    )
 
     class Role(models.TextChoices):
         ADMIN = "admin", "مدیر"

@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, Input } from '@/components/ui/input'
+import { usernameError } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
 
 const PALETTE = [
@@ -55,6 +56,13 @@ export function ProfilePage() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
+    if (username.trim() !== user?.username) {
+      const bad = usernameError(username)
+      if (bad) {
+        toast({ title: 'خطا', description: bad, variant: 'error' })
+        return
+      }
+    }
     setBusy(true)
     try {
       const body: Record<string, string> = {}
@@ -95,8 +103,8 @@ export function ProfilePage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={save} className="flex flex-col gap-3">
-            <Field label="نام کاربری" htmlFor="p-u">
-              <Input id="p-u" dir="ltr" value={username} onChange={(e) => setUsername(e.target.value)} required />
+            <Field label="نام کاربری" htmlFor="p-u" hint="فقط حروف انگلیسی (A–Z)، اعداد و . + - _ @">
+              <Input id="p-u" dir="ltr" value={username} onChange={(e) => setUsername(e.target.value)} required error={usernameError(username) ?? undefined} />
             </Field>
             <Field label="نام نمایشی" htmlFor="p-d">
               <Input id="p-d" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />

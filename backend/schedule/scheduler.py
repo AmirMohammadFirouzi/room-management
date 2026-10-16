@@ -35,7 +35,11 @@ W_TOTAL_WORK = 0.4              # all-time total tasks (overall equality)
 W_RECENT_TASK = 4.0             # same task type within the last 4 weeks
 W_REPEAT_TASK_LAST_WEEK = 8.0   # identical task type as last week
 W_SAME_WEEKDAY_LAST_WEEK = 6.0  # any task on the same weekday last week
-W_WEEK_LOAD = 3.0               # tasks already assigned in the target week
+W_WEEK_LOAD = 4.0               # tasks already assigned in the target week
+W_REPEAT_TASK_THIS_WEEK = 9.0   # same task type already given this week
+                                # (spreads vacuuming/cooking across members;
+                                #  history is frozen per-week, so week_load +
+                                #  this penalty are the only intra-week signals)
 W_REUSE_CLEANING = 50.0         # breaking the strict rule (fallback only)
 
 # NOTE: the cooking days/people are admin-configurable and come from
@@ -101,6 +105,7 @@ def score(
     task_type: str,
     weekday: int,
     week_load: dict[int, int],
+    week_task_counts: dict[tuple[int, str], int],
     cleaning_used: set[int],
 ) -> float:
     h = history
@@ -112,6 +117,9 @@ def score(
     if weekday in h.last_week_weekdays[member_id]:
         s += W_SAME_WEEKDAY_LAST_WEEK
     s += W_WEEK_LOAD * week_load[member_id]
+    # Intra-week diversity: strongly discourage handing the same task type to
+    # one person twice in the same week (history cannot see in-week picks).
+    s += W_REPEAT_TASK_THIS_WEEK * week_task_counts[(member_id, task_type)]
     if task_type == TaskType.CLEANING and member_id in cleaning_used:
         # Fallback only: the room has fewer than 7 active members.
         s += W_REUSE_CLEANING
@@ -154,6 +162,7 @@ def generate_schedule(week_start: date, generated_by, replace: bool = False):
 
     assigned: dict[date, set[int]] = defaultdict(set)  # busy people per day
     week_load: dict[int, int] = defaultdict(int)       # tasks this week
+    week_task_counts: dict[tuple[int, str], int] = defaultdict(int)
     cleaning_used: set[int] = set()
     results: list[tuple[date, int, str, User]] = []
 
@@ -169,14 +178,32 @@ def generate_schedule(week_start: date, generated_by, replace: bool = False):
             if not_cleaned_yet:
                 eligible = not_cleaned_yet
 
+        # Prefer people who have not yet done this task type this week.
+        not_repeated = [
+            m for m in eligible if week_task_counts[(m.id, task_type)] == 0
+        ]
+        if not_repeated:
+            eligible = not_repeated
+
         if not eligible:
-            # Tiny room: allow a second task that day as a last resort.
-            eligible = list(members)
+            # Room too small to fill this day's slots without giving someone a
+            # second task the same day. The one-task-per-day rule is hard
+            # (DB-enforced `uniq_person_per_day`), so skip the slot instead of
+            # violating it — participant counts degrade gracefully.
+            continue
 
         best = min(
             eligible,
             key=lambda m: (
-                score(history, m.id, task_type, wd, week_load, cleaning_used),
+                score(
+                    history,
+                    m.id,
+                    task_type,
+                    wd,
+                    week_load,
+                    week_task_counts,
+                    cleaning_used,
+                ),
                 history.total_counts[m.id],
                 (member_index[m.id] - week_number) % len(members),
             ),
@@ -186,6 +213,7 @@ def generate_schedule(week_start: date, generated_by, replace: bool = False):
             cleaning_used.add(best.id)
         assigned[d].add(best.id)
         week_load[best.id] += 1
+        week_task_counts[(best.id, task_type)] += 1
         results.append((d, wd, task_type, best))
 
     schedule = WeeklySchedule.objects.create(

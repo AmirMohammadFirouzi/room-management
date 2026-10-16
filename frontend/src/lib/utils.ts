@@ -38,3 +38,18 @@ export function faNumber(value: number): string {
 export function formatToman(value: number): string {
   return `${faNumber(value)} تومان`;
 }
+
+/**
+ * Latin-only username check (mirrors the backend rule: A–Z, 0–9 plus
+ * @ . + - _). Persian and other non-Latin letters are rejected.
+ * Returns a Persian error message, or null when the value is valid.
+ */
+export function usernameError(value: string): string | null {
+  const v = value.trim()
+  if (!v) return 'نام کاربری را وارد کنید.'
+  if (v.length > 150) return 'نام کاربری حداکثر ۱۵۰ نویسه باشد.'
+  if (!/^[A-Za-z0-9@.+\-_]+$/.test(v)) {
+    return 'نام کاربری فقط می‌تواند شامل حروف انگلیسی (A–Z)، اعداد و کاراکترهای . + - _ @ باشد.'
+  }
+  return null
+}

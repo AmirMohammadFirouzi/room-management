@@ -45,7 +45,6 @@ export function Layout() {
   const { unread } = useNotifications()
   const navigate = useNavigate()
   const [brand, setBrand] = React.useState<SiteBranding | null>(null)
-  const [menuOpen, setMenuOpen] = React.useState(false)
   const [moreOpen, setMoreOpen] = React.useState(false)
   const [adminOpen, setAdminOpen] = React.useState(false)
   const adminWrapRef = React.useRef<HTMLDivElement | null>(null)
@@ -110,7 +109,8 @@ export function Layout() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col overflow-x-hidden">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
+      {/* Desktop top navbar only — mobile uses the bottom tab bar. */}
+      <header className="sticky top-0 z-40 hidden border-b border-border bg-background/90 backdrop-blur md:block">
         <div className="flex items-center gap-2 px-4 py-3">
           <button
             type="button"
@@ -220,39 +220,11 @@ export function Layout() {
             <Button variant="ghost" size="icon" onClick={toggle} aria-label="تم">
               {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMenuOpen((o) => !o)} aria-label="منو">
-              {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
-            </Button>
             <Button variant="ghost" size="icon" onClick={() => { void logout().then(() => navigate('/login')) }} aria-label="خروج">
               <LogOut className="size-4" />
             </Button>
           </div>
         </div>
-        {menuOpen && (
-          <nav className="flex flex-wrap items-center gap-1 border-t border-border px-4 py-2 lg:hidden">
-            {allItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                onClick={() => setMenuOpen(false)}
-                className="inline-flex items-center gap-1.5 rounded-control px-3 py-1.5 text-sm text-muted-foreground"
-              >
-                <item.icon className="size-4" />
-                {item.label}
-                <NavBadge n={item.badge} />
-              </NavLink>
-            ))}
-            <NavLink
-              to="/profile"
-              onClick={() => setMenuOpen(false)}
-              className="inline-flex items-center gap-1.5 rounded-control px-3 py-1.5 text-sm text-muted-foreground"
-            >
-              <UserRound className="size-4" />
-              پروفایل من
-            </NavLink>
-          </nav>
-        )}
       </header>
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-5 pb-28 md:pb-10">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 text-center md:mx-0 md:max-w-none md:text-start">
@@ -350,6 +322,29 @@ export function Layout() {
               <UserRound className="size-4 text-brand" />
               <span className="flex-1 text-start">پروفایل من</span>
             </NavLink>
+            <button
+              type="button"
+              onClick={toggle}
+              className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm hover:bg-accent"
+            >
+              {theme === 'dark' ? (
+                <Sun className="size-4 text-brand" />
+              ) : (
+                <Moon className="size-4 text-brand" />
+              )}
+              <span className="flex-1 text-start">{theme === 'dark' ? 'حالت روشن' : 'حالت تیره'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMoreOpen(false)
+                void logout().then(() => navigate('/login'))
+              }}
+              className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm text-destructive hover:bg-accent"
+            >
+              <LogOut className="size-4" />
+              <span className="flex-1 text-start">خروج</span>
+            </button>
           </div>
         </div>
       )}

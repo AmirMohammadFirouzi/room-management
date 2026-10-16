@@ -26,3 +26,7 @@ npm-debug.log*
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Personal deployment bundles (do not track)
+room-management-*.tar
+backend/schedule_check.py

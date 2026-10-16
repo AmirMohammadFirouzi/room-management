@@ -1,8 +1,20 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
+from django.core.validators import RegexValidator
 from rest_framework import serializers
 
 from .models import User
+
+# Shared with the frontend: Latin-only usernames (existing Django rule —
+# A–Z, 0–9 plus @ . + - _). Persian and other non-Latin letters are rejected.
+username_validator = RegexValidator(
+    regex=r"^[A-Za-z0-9@.+\-_]+$",
+    message=(
+        "نام کاربری فقط می‌تواند شامل حروف انگلیسی (A–Z)، اعداد و"
+        " کاراکترهای . + - _ @ باشد."
+    ),
+    code="invalid_username",
+)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -111,6 +123,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         value = value.strip()
         if not value:
             raise serializers.ValidationError("نام کاربری را وارد کنید.")
+        username_validator(value)
         if User.objects.filter(username__iexact=value).exists():
             raise serializers.ValidationError("این نام کاربری قبلاً گرفته شده است.")
         return value
@@ -163,6 +176,7 @@ class MeUpdateSerializer(serializers.ModelSerializer):
         value = value.strip()
         if not value:
             raise serializers.ValidationError("نام کاربری را وارد کنید.")
+        username_validator(value)
         clash = User.objects.filter(username__iexact=value).exclude(
             pk=self.instance.pk
         )

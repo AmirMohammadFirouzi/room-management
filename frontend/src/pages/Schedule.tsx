@@ -50,8 +50,8 @@ export function WeekTable({
     <div className="overflow-x-auto rounded-surface border border-border">
       <table className="w-full min-w-[640px] border-collapse bg-card text-sm">
         <thead>
-          <tr className="bg-secondary/60">
-            <th className="sticky start-0 w-28 border-b border-e border-border bg-secondary/60 px-2 py-2 text-start text-xs font-semibold text-muted-foreground">
+          <tr>
+            <th className="sticky start-0 z-10 w-28 border-b border-e border-border bg-secondary px-2 py-2 text-start text-xs font-semibold text-muted-foreground">
               روز
             </th>
             {userIds.map((id) => {

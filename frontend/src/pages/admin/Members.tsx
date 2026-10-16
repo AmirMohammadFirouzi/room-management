@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, Input } from '@/components/ui/input'
+import { usernameError } from '@/lib/utils'
 
 export function MembersAdminPage() {
   const { toast } = useToast()
@@ -24,6 +25,11 @@ export function MembersAdminPage() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault()
+    const bad = usernameError(form.username)
+    if (bad) {
+      toast({ title: 'خطا', description: bad, variant: 'error' })
+      return
+    }
     setBusy(true)
     try {
       await api.post('/members/', { ...form, username: form.username.trim() })
@@ -36,6 +42,11 @@ export function MembersAdminPage() {
 
   async function save() {
     if (!editing) return
+    const bad = usernameError(editing.username)
+    if (bad) {
+      toast({ title: 'خطا', description: bad, variant: 'error' })
+      return
+    }
     setBusy(true)
     try {
       const body: Record<string, unknown> = {
@@ -59,7 +70,7 @@ export function MembersAdminPage() {
         <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm"><UserPlus className="size-4 text-brand" /> افزودن هم‌اتاقی</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={create} className="grid gap-3 sm:grid-cols-2">
-            <Field label="نام کاربری" htmlFor="m-u"><Input id="m-u" dir="ltr" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required /></Field>
+            <Field label="نام کاربری" htmlFor="m-u" hint="فقط حروف انگلیسی (A–Z)، اعداد و . + - _ @"><Input id="m-u" dir="ltr" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required error={usernameError(form.username) ?? undefined} /></Field>
             <Field label="نام نمایشی" htmlFor="m-d"><Input id="m-d" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} required /></Field>
             <Field label="رمز عبور" htmlFor="m-p"><Input id="m-p" dir="ltr" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required /></Field>
             <Field label="نقش" htmlFor="m-r">
@@ -87,7 +98,7 @@ export function MembersAdminPage() {
           <div className="w-full max-w-md rounded-overlay border border-border bg-popover p-5" onClick={(e) => e.stopPropagation()}>
             <h2 className="font-bold">ویرایش {editing.display_name}</h2>
             <div className="mt-3 flex flex-col gap-3">
-              <Field label="نام کاربری" htmlFor="e-u"><Input id="e-u" dir="ltr" value={editing.username} onChange={(e) => setEditing({ ...editing, username: e.target.value })} /></Field>
+              <Field label="نام کاربری" htmlFor="e-u" hint="فقط حروف انگلیسی (A–Z)، اعداد و . + - _ @"><Input id="e-u" dir="ltr" value={editing.username} onChange={(e) => setEditing({ ...editing, username: e.target.value })} error={usernameError(editing.username) ?? undefined} /></Field>
               <Field label="نام نمایشی" htmlFor="e-d"><Input id="e-d" value={editing.display_name} onChange={(e) => setEditing({ ...editing, display_name: e.target.value })} /></Field>
               <Field label="رمز عبور جدید (خالی = بدون تغییر)" htmlFor="e-p"><Input id="e-p" dir="ltr" type="password" value={editing.password ?? ''} onChange={(e) => setEditing({ ...editing, password: e.target.value })} /></Field>
               <Field label="نقش" htmlFor="e-r">

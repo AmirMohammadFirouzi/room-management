@@ -7,6 +7,7 @@ import type { SiteBranding } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, Input } from '@/components/ui/input'
+import { usernameError } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 
 /** صفحه‌ی ورود: عنوان/لوگوی قابل ویرایش توسط مدیر، «مرا به خاطر بسپار»، ثبت‌نام. */
@@ -33,6 +34,12 @@ export function LoginPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
+    const bad = usernameError(username)
+    if (bad) {
+      setError(bad)
+      toast({ title: mode === 'login' ? 'ورود ناموفق' : 'ثبت‌نام ناموفق', description: bad, variant: 'error' })
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -76,7 +83,7 @@ export function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="flex flex-col gap-4">
-            <Field label="نام کاربری" htmlFor="username">
+            <Field label="نام کاربری" htmlFor="username" hint="فقط حروف انگلیسی (A–Z)، اعداد و . + - _ @">
               <Input
                 id="username"
                 dir="ltr"
@@ -86,6 +93,7 @@ export function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 autoFocus
+                error={username ? usernameError(username) ?? undefined : error || undefined}
               />
             </Field>
             {mode === 'register' && (
