@@ -19,6 +19,8 @@ frontend/node_modules/
 frontend/dist/
 frontend/dev-dist/
 npm-debug.log*
+*build_job.txt
+*build_state.txt
 
 # Editor / OS
 .vscode/
