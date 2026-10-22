@@ -61,7 +61,7 @@ export function LoginPage() {
 
   const title = brand?.site_title ?? 'خوش آمدید'
   const logo = brand?.site_logo || ''
-  const logoImage = brand?.site_logo_image || ''
+  const logoImage = brand?.site_logo_image || '/icons/apple-touch-icon.png'
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md items-center justify-center px-4 py-8">
@@ -83,7 +83,7 @@ export function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="flex flex-col gap-4">
-            <Field label="نام کاربری" htmlFor="username" hint="فقط حروف انگلیسی (A–Z)، اعداد و . + - _ @">
+            <Field label="نام کاربری" htmlFor="username">
               <Input
                 id="username"
                 dir="ltr"
@@ -104,7 +104,7 @@ export function LoginPage() {
                   startAddon={<UserRound className="size-4" strokeWidth={1.75} />}
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="مثلا: سینا خانی"
+                  placeholder="مثلا: جواد خیابانی"
                   required
                 />
               </Field>

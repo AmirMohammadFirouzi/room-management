@@ -59,6 +59,8 @@ export interface WeeklySchedule {
   published_at_jalali?: string | null
   assignments: Assignment[]
   exists?: boolean
+  /** Server's today accompanying the payload — never the browser clock. */
+  today?: string
 }
 
 export interface SiteBranding {
@@ -214,9 +216,10 @@ export interface WalletData {
 }
 
 export interface DashboardData {
-  today: Assignment[]
   my_week: Assignment[]
   week_start: string
+  /** Server's today (YYYY-MM-DD) — the browser clock is never used for these splits. */
+  today: string
   balance: {
     owed_total: number
     paid_total: number

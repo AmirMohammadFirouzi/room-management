@@ -13,7 +13,7 @@ from django.core.management.base import BaseCommand
 
 from accounts.models import User
 from expenses.models import Expense, ExpenseShare, Payment
-from schedule.models import SiteSettings, saturday_of
+from schedule.models import SiteSettings, saturday_of, server_today
 from schedule.scheduler import generate_schedule
 
 ROOMMATES = [
@@ -106,7 +106,7 @@ class Command(BaseCommand):
     def _demo(self):
         from schedule.models import ScheduleStatus, WeeklySchedule
 
-        week_start = saturday_of(date.today())
+        week_start = saturday_of(server_today())
         schedule = WeeklySchedule.objects.filter(week_start=week_start).first()
         if schedule is None:
             admin_user = (

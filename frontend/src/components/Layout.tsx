@@ -1,5 +1,5 @@
-import * as React from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import * as React from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   LayoutGrid,
   CalendarDays,
@@ -19,92 +19,126 @@ import {
   Megaphone,
   BarChart3,
   X,
-} from 'lucide-react'
-import { cn, fa } from '@/lib/utils'
-import { useAuth } from '@/auth'
-import { useTheme } from '@/theme'
-import { useDashboard } from '@/hooks/useDashboard'
-import { useNotifications } from '@/hooks/useNotifications'
-import { api } from '@/lib/api'
-import type { SiteBranding } from '@/lib/types'
-import { Avatar } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
+} from "lucide-react";
+import { cn, fa } from "@/lib/utils";
+import { useAuth } from "@/auth";
+import { useTheme } from "@/theme";
+import { useDashboard } from "@/hooks/useDashboard";
+import { useNotifications } from "@/hooks/useNotifications";
+import { api } from "@/lib/api";
+import type { SiteBranding } from "@/lib/types";
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 
 interface NavItem {
-  to: string
-  label: string
-  icon: React.ComponentType<{ className?: string }>
-  badge?: number
-  admin?: boolean
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: number;
+  admin?: boolean;
 }
 /** App shell: top bar on desktop, bottom tab bar + «بیشتر» drawer on mobile. */
 export function Layout() {
-  const { user, logout } = useAuth()
-  const { theme, toggle } = useTheme()
-  const { data } = useDashboard()
-  const { unread } = useNotifications()
-  const navigate = useNavigate()
-  const [brand, setBrand] = React.useState<SiteBranding | null>(null)
-  const [moreOpen, setMoreOpen] = React.useState(false)
-  const [adminOpen, setAdminOpen] = React.useState(false)
-  const adminWrapRef = React.useRef<HTMLDivElement | null>(null)
+  const { user, logout } = useAuth();
+  const { theme, toggle } = useTheme();
+  const { data } = useDashboard();
+  const { unread } = useNotifications();
+  const navigate = useNavigate();
+  const [brand, setBrand] = React.useState<SiteBranding | null>(null);
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  const [adminOpen, setAdminOpen] = React.useState(false);
+  const adminWrapRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
-    if (!adminOpen) return
+    if (!adminOpen) return;
     function onDocClick(e: MouseEvent) {
-      if (adminWrapRef.current && !adminWrapRef.current.contains(e.target as Node)) {
-        setAdminOpen(false)
+      if (
+        adminWrapRef.current &&
+        !adminWrapRef.current.contains(e.target as Node)
+      ) {
+        setAdminOpen(false);
       }
     }
-    document.addEventListener('mousedown', onDocClick)
-    return () => document.removeEventListener('mousedown', onDocClick)
-  }, [adminOpen])
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [adminOpen]);
 
   React.useEffect(() => {
-    api.get<SiteBranding>('/site/').then(setBrand).catch(() => undefined)
-  }, [])
+    api
+      .get<SiteBranding>("/site/")
+      .then(setBrand)
+      .catch(() => undefined);
+  }, []);
 
-  const pendingSubs = data?.pending.substitutions ?? 0
+  const pendingSubs = data?.pending.substitutions ?? 0;
   const adminPending =
-    (data?.pending.pending_substitutions ?? 0) + (data?.pending.pending_payments ?? 0)
-  const totalBadge = unread + pendingSubs + (user?.is_admin ? adminPending : 0)
+    (data?.pending.pending_substitutions ?? 0) +
+    (data?.pending.pending_payments ?? 0);
+  const totalBadge = unread + pendingSubs + (user?.is_admin ? adminPending : 0);
 
   const items: NavItem[] = [
-    { to: '/', label: 'داشبورد', icon: LayoutGrid },
-    { to: '/schedule', label: 'برنامه', icon: CalendarDays },
-    { to: '/substitutions', label: 'جایگزینی', icon: ArrowLeftRight, badge: pendingSubs },
-    { to: '/expenses', label: 'هزینه‌ها', icon: Wallet },
-    { to: '/wallet', label: 'کیف پول', icon: Wallet },
-  ]
+    { to: "/", label: "داشبورد", icon: LayoutGrid },
+    { to: "/schedule", label: "برنامه", icon: CalendarDays },
+    {
+      to: "/substitutions",
+      label: "جایگزینی",
+      icon: ArrowLeftRight,
+      badge: pendingSubs,
+    },
+    { to: "/expenses", label: "هزینه‌ها", icon: Wallet },
+    { to: "/wallet", label: "کیف پول", icon: Wallet },
+  ];
   const adminItems: NavItem[] = [
-    { to: '/admin/approvals', label: 'تأییدها', icon: CheckCheck, badge: adminPending, admin: true },
-    { to: '/admin/schedule', label: 'ساخت برنامه', icon: CalendarPlus, admin: true },
-    { to: '/admin/members', label: 'اعضا', icon: Users, admin: true },
-    { to: '/admin/settings', label: 'تنظیمات', icon: Settings, admin: true },
-    { to: '/admin/stats', label: 'آمار', icon: BarChart3, admin: true },
-    { to: '/admin/announce', label: 'اطلاعیه', icon: Megaphone, admin: true },
-  ]
-  const allItems = [...items, ...(user?.is_admin ? adminItems : [])]
-  const title = brand?.site_title ?? 'اتاق مشترک'
-  const logo = brand?.site_logo || ''
+    {
+      to: "/admin/approvals",
+      label: "تأییدها",
+      icon: CheckCheck,
+      badge: adminPending,
+      admin: true,
+    },
+    {
+      to: "/admin/schedule",
+      label: "ساخت برنامه",
+      icon: CalendarPlus,
+      admin: true,
+    },
+    { to: "/admin/members", label: "اعضا", icon: Users, admin: true },
+    { to: "/admin/settings", label: "تنظیمات", icon: Settings, admin: true },
+    { to: "/admin/stats", label: "آمار", icon: BarChart3, admin: true },
+    { to: "/admin/announce", label: "اطلاعیه", icon: Megaphone, admin: true },
+  ];
+  const allItems = [...items, ...(user?.is_admin ? adminItems : [])];
+  const title = brand?.site_title ?? "اتاق مشترک";
+  const defaultLogo = "/icons/icon-192.png";
 
   const mobileTabs: (NavItem | { more: true })[] = user?.is_admin
     ? [
         items[0],
         items[1],
         items[3],
-        { to: '/admin/approvals', label: 'تأییدها', icon: CheckCheck, badge: adminPending },
+        {
+          to: "/admin/approvals",
+          label: "تأییدها",
+          icon: CheckCheck,
+          badge: adminPending,
+        },
         { more: true } as { more: true },
       ]
-    : [items[0], items[1], items[3], items[4], { more: true } as { more: true }]
+    : [
+        items[0],
+        items[1],
+        items[3],
+        items[4],
+        { more: true } as { more: true },
+      ];
 
   function NavBadge({ n }: { n?: number }) {
-    if (!n) return null
+    if (!n) return null;
     return (
       <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-brand-foreground">
         {fa(n)}
       </span>
-    )
+    );
   }
 
   return (
@@ -115,32 +149,40 @@ export function Layout() {
           <button
             type="button"
             className="flex min-w-0 flex-1 items-center gap-2 text-start"
-            onClick={() => navigate('/')}
+            onClick={() => navigate("/")}
             aria-label={title}
           >
             <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-brand text-lg text-brand-foreground">
               {brand?.site_logo_image ? (
-                <img src={brand.site_logo_image} alt={title} className="size-full object-cover" />
-              ) : logo ? (
-                <span aria-hidden>{logo}</span>
+                <img
+                  src={brand.site_logo_image}
+                  alt={title}
+                  className="size-full object-cover"
+                />
               ) : (
-                <ShieldCheck className="size-4" />
+                <img
+                  src={defaultLogo}
+                  alt={title}
+                  className="size-full object-cover"
+                />
               )}
             </span>
-            <span className="truncate font-display text-sm font-bold">{title}</span>
+            <span className="truncate font-display text-sm font-bold">
+              {title}
+            </span>
           </button>
           <nav className="hidden min-w-0 items-center gap-1 lg:flex">
             {items.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === '/'}
+                end={item.to === "/"}
                 className={({ isActive }) =>
                   cn(
-                    'relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control px-3 py-1.5 text-sm transition-colors',
+                    "relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control px-3 py-1.5 text-sm transition-colors",
                     isActive
-                      ? 'bg-secondary font-semibold text-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                      ? "bg-secondary font-semibold text-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )
                 }
               >
@@ -156,10 +198,10 @@ export function Layout() {
                   onClick={() => setAdminOpen((o) => !o)}
                   aria-expanded={adminOpen}
                   className={cn(
-                    'inline-flex items-center gap-1.5 whitespace-nowrap rounded-control px-3 py-1.5 text-sm transition-colors',
+                    "inline-flex items-center gap-1.5 whitespace-nowrap rounded-control px-3 py-1.5 text-sm transition-colors",
                     adminOpen
-                      ? 'bg-secondary font-semibold text-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                      ? "bg-secondary font-semibold text-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
                   <Settings className="size-4" />
@@ -175,10 +217,10 @@ export function Layout() {
                         onClick={() => setAdminOpen(false)}
                         className={({ isActive }) =>
                           cn(
-                            'flex items-center gap-3 rounded-control px-3 py-2.5 text-sm transition-colors',
+                            "flex items-center gap-3 rounded-control px-3 py-2.5 text-sm transition-colors",
                             isActive
-                              ? 'bg-secondary font-semibold text-foreground'
-                              : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                              ? "bg-secondary font-semibold text-foreground"
+                              : "text-muted-foreground hover:bg-accent hover:text-foreground",
                           )
                         }
                       >
@@ -196,18 +238,20 @@ export function Layout() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate('/profile')}
+              onClick={() => navigate("/profile")}
               aria-label="پروفایل"
               title="پروفایل من"
             >
               <Avatar
-                name={user?.display_name ?? ''}
+                name={user?.display_name ?? ""}
                 src={user?.avatar_image || undefined}
                 color={user?.avatar_bg || undefined}
                 size="sm"
               />
             </Button>
-            <span className="hidden max-w-28 truncate text-sm xl:inline">{user?.display_name}</span>
+            <span className="hidden max-w-28 truncate text-sm xl:inline">
+              {user?.display_name}
+            </span>
             {totalBadge > 0 && (
               <span
                 className="inline-flex min-w-5 items-center justify-center gap-0.5 rounded-full bg-brand px-1.5 text-[11px] font-bold leading-5 text-brand-foreground"
@@ -217,10 +261,26 @@ export function Layout() {
                 {fa(totalBadge)}
               </span>
             )}
-            <Button variant="ghost" size="icon" onClick={toggle} aria-label="تم">
-              {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggle}
+              aria-label="تم"
+            >
+              {theme === "dark" ? (
+                <Sun className="size-4" />
+              ) : (
+                <Moon className="size-4" />
+              )}
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => { void logout().then(() => navigate('/login')) }} aria-label="خروج">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                void logout().then(() => navigate("/login"));
+              }}
+              aria-label="خروج"
+            >
               <LogOut className="size-4" />
             </Button>
           </div>
@@ -234,7 +294,7 @@ export function Layout() {
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         <div className="grid grid-cols-5">
           {mobileTabs.map((tab, i) => {
-            if ('more' in tab) {
+            if ("more" in tab) {
               return (
                 <button
                   key="more"
@@ -252,17 +312,19 @@ export function Layout() {
                   </span>
                   بیشتر
                 </button>
-              )
+              );
             }
             return (
               <NavLink
                 key={`${tab.to}-${i}`}
                 to={tab.to}
-                end={tab.to === '/'}
+                end={tab.to === "/"}
                 className={({ isActive }) =>
                   cn(
-                    'relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] transition-colors',
-                    isActive ? 'font-semibold text-foreground' : 'text-muted-foreground',
+                    "relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] transition-colors",
+                    isActive
+                      ? "font-semibold text-foreground"
+                      : "text-muted-foreground",
                   )
                 }
               >
@@ -276,7 +338,7 @@ export function Layout() {
                 </span>
                 {tab.label}
               </NavLink>
-            )
+            );
           })}
         </div>
       </nav>
@@ -293,7 +355,12 @@ export function Layout() {
           >
             <div className="mb-1 flex items-center justify-between">
               <p className="text-sm font-bold">همه بخش‌ها</p>
-              <Button variant="ghost" size="icon" onClick={() => setMoreOpen(false)} aria-label="بستن">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMoreOpen(false)}
+                aria-label="بستن"
+              >
                 <X className="size-4" />
               </Button>
             </div>
@@ -301,7 +368,7 @@ export function Layout() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === '/'}
+                end={item.to === "/"}
                 onClick={() => setMoreOpen(false)}
                 className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm hover:bg-accent"
               >
@@ -327,18 +394,20 @@ export function Layout() {
               onClick={toggle}
               className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm hover:bg-accent"
             >
-              {theme === 'dark' ? (
+              {theme === "dark" ? (
                 <Sun className="size-4 text-brand" />
               ) : (
                 <Moon className="size-4 text-brand" />
               )}
-              <span className="flex-1 text-start">{theme === 'dark' ? 'حالت روشن' : 'حالت تیره'}</span>
+              <span className="flex-1 text-start">
+                {theme === "dark" ? "حالت روشن" : "حالت تیره"}
+              </span>
             </button>
             <button
               type="button"
               onClick={() => {
-                setMoreOpen(false)
-                void logout().then(() => navigate('/login'))
+                setMoreOpen(false);
+                void logout().then(() => navigate("/login"));
               }}
               className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm text-destructive hover:bg-accent"
             >
@@ -349,6 +418,5 @@ export function Layout() {
         </div>
       )}
     </div>
-  )
+  );
 }
-

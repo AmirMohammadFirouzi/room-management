@@ -22,6 +22,7 @@ from .models import (
     WeeklySchedule,
     persian_weekday,
     saturday_of,
+    server_today,
 )
 from .scheduler import generate_schedule, next_week_start
 from .serializers import (
@@ -73,6 +74,29 @@ class PublicSiteView(APIView):
         )
 
 
+class ServerTimeView(APIView):
+    """The server's current date/time — the single source of truth.
+
+    Clients must never trust the browser clock (wrong timezone or skew is
+    exactly how dates end up a day ahead). Returns the active Django
+    timezone's local date (Asia/Tehran) plus the current week's Saturday.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        today = server_today()
+        now = timezone.localtime()
+        return Response(
+            {
+                "today": today.isoformat(),
+                "week_start": saturday_of(today).isoformat(),
+                "datetime": now.isoformat(),
+                "timezone": str(timezone.get_current_timezone()),
+            }
+        )
+
+
 class ScheduleView(APIView):
     """GET ?week=YYYY-MM-DD returns that week's schedule (defaults to current).
 
@@ -91,7 +115,7 @@ class ScheduleView(APIView):
                 )
             week_start = saturday_of(d)
         else:
-            week_start = saturday_of(date.today())
+            week_start = saturday_of(server_today())
 
         schedule = (
             WeeklySchedule.objects.filter(week_start=week_start)
@@ -104,6 +128,7 @@ class ScheduleView(APIView):
             return Response(
                 {
                     "week_start": week_start.isoformat(),
+                    "today": server_today().isoformat(),
                     "exists": False,
                     "schedule_status": None,
                     "assignments": [],
@@ -116,6 +141,7 @@ class ScheduleView(APIView):
             return Response(
                 {
                     "week_start": week_start.isoformat(),
+                    "today": server_today().isoformat(),
                     "exists": False,
                     "schedule_status": ScheduleStatus.DRAFT,
                     "assignments": [],
@@ -124,6 +150,7 @@ class ScheduleView(APIView):
 
         data = WeeklyScheduleSerializer(schedule).data
         data["exists"] = True
+        data["today"] = server_today().isoformat()
         return Response(data)
 
 
@@ -170,7 +197,7 @@ class PublishScheduleView(APIView):
                     {"detail": "تاریخ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST
                 )
         else:
-            week_start = saturday_of(date.today())
+            week_start = saturday_of(server_today())
 
         schedule = WeeklySchedule.objects.filter(week_start=week_start).first()
         if not schedule:
@@ -304,7 +331,7 @@ class MyAssignmentsView(APIView):
                 date__gte=week_start, date__lte=week_start + timedelta(days=6)
             )
         else:
-            qs = qs.filter(date=date.today())
+            qs = qs.filter(date=server_today())
         if not request.user.is_admin_role:
             qs = qs.filter(assigned_to=request.user)
         return Response(AssignmentSerializer(qs, many=True).data)
@@ -331,7 +358,7 @@ class ConfirmAssignmentView(APIView):
         # (An admin may still correct a record on any day.)
         if (
             assignment.assigned_to_id == request.user.id
-            and assignment.date != date.today()
+            and assignment.date != server_today()
         ):
             return Response(
                 {"detail": "فقط در روز خودِ تکلیف می‌توانید آن را تأیید کنید."},
@@ -629,11 +656,9 @@ class DashboardView(APIView):
     """Everything the personal dashboard needs in one request."""
 
     def get(self, request):
-        from datetime import date as _date
-
         from expenses.serializers import ExpenseSerializer
 
-        today = _date.today()
+        today = server_today()
         week_start = saturday_of(today)
         week_end = week_start + timedelta(days=6)
         user = request.user
@@ -687,6 +712,8 @@ class DashboardView(APIView):
                 "today": AssignmentSerializer(today_all, many=True).data,
                 "my_week": AssignmentSerializer(mine_week, many=True).data,
                 "week_start": week_start.isoformat(),
+                # Server truth for the client (browser clocks are not trusted).
+                "today": today.isoformat(),
                 "balance": {
                     "owed_total": owed_total,
                     "paid_total": paid_total,

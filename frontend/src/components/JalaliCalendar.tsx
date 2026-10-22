@@ -2,13 +2,13 @@ import * as React from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   WEEKDAY_SHORT,
-  dateToJalaliObj,
   isoToJalali,
   jalaliDaysInMonth,
   jalaliMonthName,
   jalaliToISO,
   type JalaliDate,
 } from '@/lib/jalali'
+import { useServerToday } from '@/hooks/useServerTime'
 import { cn, fa } from '@/lib/utils'
 
 export interface JalaliCalendarProps {
@@ -48,10 +48,16 @@ export function JalaliCalendar({
   isDisabled,
   className,
 }: JalaliCalendarProps) {
-  const today = React.useMemo(() => dateToJalaliObj(new Date()), [])
+  // «امروز» for the min-date guard comes from the SERVER clock so a skewed
+  // browser can never mark a past date selectable (or vice versa).
+  const serverToday = useServerToday()
+  const today = React.useMemo(
+    () => (serverToday ? isoToJalali(serverToday) : null),
+    [serverToday],
+  )
   const [view, setView] = React.useState(() => {
     const base = value ?? today
-    return { jy: base.jy, jm: base.jm }
+    return base ? { jy: base.jy, jm: base.jm } : { jy: 1405, jm: 1 }
   })
 
   React.useEffect(() => {
@@ -65,7 +71,7 @@ export function JalaliCalendar({
     (new Date(jalaliToISO({ jy: view.jy, jm: view.jm, jd: 1 })).getDay() + 2) % 7
 
   function disabled(d: JalaliDate): boolean {
-    if (minToday && jalaliToISO(d) < jalaliToISO(today)) return true
+    if (minToday && today && jalaliToISO(d) < jalaliToISO(today)) return true
     return isDisabled?.(d) ?? false
   }
 

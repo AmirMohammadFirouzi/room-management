@@ -2,7 +2,8 @@ import * as React from 'react'
 import { CalendarPlus, History, Scale } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { Assignment, Candidate, Credit, SubstitutionRequest } from '@/lib/types'
-import { formatJalali, jalaliToISO, todayISO, type JalaliDate } from '@/lib/jalali'
+import { formatJalali, jalaliToISO, type JalaliDate } from '@/lib/jalali'
+import { useServerToday } from '@/hooks/useServerTime'
 import { cn, fa } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { Badge } from '@/components/ui/badge'
@@ -22,8 +23,15 @@ export function SubstitutionsPage() {
   const [credits, setCredits] = React.useState<{ i_owe: Credit[]; owed_to_me: Credit[] } | null>(null)
 
   // New-request wizard: pick a date (today/future) → my task → a replacement.
+  // Initial day locks to the server's today, never the browser clock.
+  const serverToday = useServerToday()
   const [open, setOpen] = React.useState(false)
-  const [day, setDay] = React.useState(todayISO())
+  const [day, setDay] = React.useState<string | null>(null)
+  const dayISO = day ?? serverToday ?? ''
+
+  React.useEffect(() => {
+    if (!day && serverToday) setDay(serverToday)
+  }, [day, serverToday])
   const [dayTasks, setDayTasks] = React.useState<Assignment[]>([])
   const [step, setStep] = React.useState<'date' | 'task' | 'person'>('date')
   const [target, setTarget] = React.useState<Assignment | null>(null)
@@ -206,7 +214,7 @@ export function SubstitutionsPage() {
                   {step === 'person' && '۳) چه کسی جای شما بیاید؟'}
                 </p>
               </div>
-              <Badge variant="outline">{formatJalali(day)}</Badge>
+              <Badge variant="outline">{dayISO ? formatJalali(dayISO) : '…'}</Badge>
             </div>
 
             {step === 'date' && (

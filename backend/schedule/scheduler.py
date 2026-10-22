@@ -1,19 +1,24 @@
-"""Fair rotating weekly schedule generator.
+"""Fair rotational weekly schedule generator (rebuilt around server time).
 
-Hard rules
-----------
+Hard rules (never broken)
+-------------------------
 - Cleaning (نظافت): one person per day, Saturday → Friday, never the same
   person twice in the same week (requires >= 7 active members; the rule only
   relaxes when the room is short on people).
 - At most ONE task per person per day — protects Friday, which stacks
-  cleaning + vacuuming + cooking.
+  cleaning + vacuuming + cooking. A slot that cannot be filled without
+  double-booking is DROPPED instead of violating the DB constraint.
+- Vacuuming / cooking only on the admin-configured days with the configured
+  participant counts (SiteSettings).
 
-Soft fairness (score minimisation)
-----------------------------------
-- Long-term per-task history (no one person doing a task type far more).
-- No same task type as last week; no task on the same weekday as last week.
-- Recent (4 weeks) and current-week load smoothing.
-- Deterministic rotation tie-break so equal scores still rotate weekly.
+Fairness (transparent greedy ranking — no magic weights)
+--------------------------------------------------------
+Every eligible person is ranked by:
+    (week load, all-time load, in-week task-type repeats, all-time task-type
+     count, rotating member position)
+and the smallest wins, so nobody does significantly more or less than the
+others — neither inside a week nor across weeks. All history is computed from
+SERVER dates only (``server_today()``), never the client clock.
 """
 
 from __future__ import annotations
@@ -25,51 +30,49 @@ from django.db import transaction
 
 from accounts.models import User
 
-from .models import TaskType, SiteSettings, persian_weekday, saturday_of
+from .models import TaskType, SiteSettings, saturday_of, server_today
 
 # ---------------------------------------------------------------------------
-# Tunable weights — bigger = stronger avoidance.
+# How a slot picks its person (transparent, deterministic, fair)
 # ---------------------------------------------------------------------------
-W_LONG_TERM_TASK = 3.0          # all-time count of this task type
-W_TOTAL_WORK = 0.4              # all-time total tasks (overall equality)
-W_RECENT_TASK = 4.0             # same task type within the last 4 weeks
-W_REPEAT_TASK_LAST_WEEK = 8.0   # identical task type as last week
-W_SAME_WEEKDAY_LAST_WEEK = 6.0  # any task on the same weekday last week
-W_WEEK_LOAD = 4.0               # tasks already assigned in the target week
-W_REPEAT_TASK_THIS_WEEK = 9.0   # same task type already given this week
-                                # (spreads vacuuming/cooking across members;
-                                #  history is frozen per-week, so week_load +
-                                #  this penalty are the only intra-week signals)
-W_REUSE_CLEANING = 50.0         # breaking the strict rule (fallback only)
-
+# Every slot is filled by ranking the eligible members with this tuple —
+# the smallest one wins:
+#
+#   1. tasks already handed out in the target week  → perfect intra-week balance
+#   2. all-time task count from previous weeks     → fair rotation over weeks
+#   3. same task type already given this week      → variety inside the week
+#   4. all-time count of this exact task type      → variety over the weeks
+#   5. rotating position of the member (week-based)→ deterministic tie-break
+#
+# Because history is frozen per week (only dates before ``week_start`` are
+# counted), steps 1 and 5 are the only in-week signals — that is enough to
+# guarantee the weekly load differs by at most one wherever capacity allows.
+#
+# Hard rules (never traded away for fairness):
+#   * one task per person per day (also enforced by the DB constraint
+#     ``uniq_person_per_day``); a slot is DROPPED, never double-booked.
+#   * cleaning at most once per person per week when the room has >= 7 members.
+#   * vacuuming/cooking only on the admin-configured days/people counts.
+#
 # NOTE: the cooking days/people are admin-configurable and come from
 # SiteSettings (defaults: Thursday(5) + Friday(6), 2 people each).
 
 
 class History:
-    """Aggregated past-assignment statistics used by the scoring function."""
+    """Frozen statistics of every assignment before ``until`` (server dates)."""
 
     def __init__(self, until: date):
         self.task_counts: dict[tuple[int, str], int] = defaultdict(int)
         self.total_counts: dict[int, int] = defaultdict(int)
-        self.recent_task_counts: dict[tuple[int, str], int] = defaultdict(int)
-        self.last_week_tasks: dict[int, set[str]] = defaultdict(set)
-        self.last_week_weekdays: dict[int, set[int]] = defaultdict(set)
 
         from .models import Assignment
 
-        last_week_start = until - timedelta(days=7)
         past = Assignment.objects.filter(date__lt=until).values_list(
-            "assigned_to_id", "task_type", "date"
+            "assigned_to_id", "task_type"
         )
-        for member_id, task_type, d in past:
+        for member_id, task_type in past:
             self.task_counts[(member_id, task_type)] += 1
             self.total_counts[member_id] += 1
-            if d >= until - timedelta(days=28):
-                self.recent_task_counts[(member_id, task_type)] += 1
-            if last_week_start <= d < until:
-                self.last_week_tasks[member_id].add(task_type)
-                self.last_week_weekdays[member_id].add(persian_weekday(d))
 
 
 def build_slots(week_start: date, settings: SiteSettings) -> list[tuple[date, int, str]]:
@@ -97,33 +100,6 @@ def build_slots(week_start: date, settings: SiteSettings) -> list[tuple[date, in
         for t in sorted(tasks, key=lambda t: 0 if t != TaskType.CLEANING else 1):
             slots.append((d, wd, t))
     return slots
-
-
-def score(
-    history: History,
-    member_id: int,
-    task_type: str,
-    weekday: int,
-    week_load: dict[int, int],
-    week_task_counts: dict[tuple[int, str], int],
-    cleaning_used: set[int],
-) -> float:
-    h = history
-    s = W_LONG_TERM_TASK * h.task_counts[(member_id, task_type)]
-    s += W_TOTAL_WORK * h.total_counts[member_id]
-    s += W_RECENT_TASK * h.recent_task_counts[(member_id, task_type)]
-    if task_type in h.last_week_tasks[member_id]:
-        s += W_REPEAT_TASK_LAST_WEEK
-    if weekday in h.last_week_weekdays[member_id]:
-        s += W_SAME_WEEKDAY_LAST_WEEK
-    s += W_WEEK_LOAD * week_load[member_id]
-    # Intra-week diversity: strongly discourage handing the same task type to
-    # one person twice in the same week (history cannot see in-week picks).
-    s += W_REPEAT_TASK_THIS_WEEK * week_task_counts[(member_id, task_type)]
-    if task_type == TaskType.CLEANING and member_id in cleaning_used:
-        # Fallback only: the room has fewer than 7 active members.
-        s += W_REUSE_CLEANING
-    return s
 
 
 # ---------------------------------------------------------------------------
@@ -195,16 +171,10 @@ def generate_schedule(week_start: date, generated_by, replace: bool = False):
         best = min(
             eligible,
             key=lambda m: (
-                score(
-                    history,
-                    m.id,
-                    task_type,
-                    wd,
-                    week_load,
-                    week_task_counts,
-                    cleaning_used,
-                ),
+                week_load[m.id],
                 history.total_counts[m.id],
+                week_task_counts[(m.id, task_type)],
+                history.task_counts[(m.id, task_type)],
                 (member_index[m.id] - week_number) % len(members),
             ),
         )
@@ -238,7 +208,7 @@ def generate_schedule(week_start: date, generated_by, replace: bool = False):
 # Helpers exposed to the API
 # ---------------------------------------------------------------------------
 def current_week_start() -> date:
-    return saturday_of(date.today())
+    return saturday_of(server_today())
 
 
 def next_week_start() -> date:

@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/auth";
 import { api } from "@/lib/api";
-import { formatJalali, todayISO } from "@/lib/jalali";
+import { formatJalali } from "@/lib/jalali";
 import { cn, fa, faNumber, formatToman } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { useDashboard } from "@/hooks/useDashboard";
@@ -55,7 +55,7 @@ export function DashboardPage() {
   const [confirmingId, setConfirmingId] = React.useState<number | null>(null);
   const navigate = useNavigate();
 
-  const today = todayISO();
+  const today = data?.today ?? '';
   const myToday = (data?.my_week ?? []).filter((a) => a.date === today);
   const restOfWeek = (data?.my_week ?? []).filter((a) => a.date !== today);
 
@@ -112,7 +112,7 @@ export function DashboardPage() {
         <h1 className="font-display text-xl font-bold">
           سلام {user?.display_name}
         </h1>
-        <p className="text-sm text-muted-foreground">{formatJalali(today)}</p>
+        <p className="text-sm text-muted-foreground">{today ? formatJalali(today) : '…'}</p>
       </div>
 
       {!data.schedule_exists && (
@@ -200,12 +200,12 @@ export function DashboardPage() {
         </div>
       </section>
 
-      {data.today.length > 0 && (
+      {myToday.length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-bold text-muted-foreground">
             امروز در اتاق
           </h2>
-          {data.today.map((a) => (
+          {myToday.map((a) => (
             <TaskCard key={a.id} assignment={a} />
           ))}
         </section>

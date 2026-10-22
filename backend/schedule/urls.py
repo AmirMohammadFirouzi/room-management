@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("settings/", views.SettingsView.as_view(), name="settings"),
     path("site/", views.PublicSiteView.as_view(), name="public-site"),
+    path("time/", views.ServerTimeView.as_view(), name="server-time"),
     path("schedule/", views.ScheduleView.as_view(), name="schedule"),
     path(
         "schedule/generate/",

@@ -143,11 +143,48 @@ export function todayISO(): string {
   return toISO(new Date())
 }
 
-/** Add n days to an ISO string, return ISO. */
+/**
+ * Add n Gregorian days to an ISO date (YYYY-MM-DD), return ISO.
+ * Pure calendar math — no `Date`, no local midnight, no DST, no timezone.
+ * The result is the same calendar date everywhere, so a client clock can
+ * never shift a week boundary or "today" by a day.
+ */
 export function addDaysISO(iso: string, n: number): string {
-  const d = parseISO(iso)
-  d.setDate(d.getDate() + n)
-  return toISO(d)
+  const [y, m, d] = iso.split('-').map(Number)
+
+  // Days since 1970-01-01 (Howard Hinnant's civil-calendar algorithm).
+  const y0 = m <= 2 ? y - 1 : y
+  const era = Math.floor(y0 / 400)
+  const yoe = y0 - era * 400
+  const doy =
+    Math.floor((153 * (m > 2 ? m - 3 : m + 9) + 2) / 5) + d - 1
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy
+  const z = era * 146097 + doe - 719468 + n
+
+  // Civil date from days since 1970-01-01.
+  const z2 = z + 719468
+  const era2 = Math.floor((z2 >= 0 ? z2 : z2 - 146096) / 146097)
+  const doe2 = z2 - era2 * 146097
+  const yoe2 =
+    Math.floor(
+      (doe2 -
+        Math.floor(doe2 / 1460) +
+        Math.floor(doe2 / 36524) -
+        Math.floor(doe2 / 146096)) /
+        365
+    )
+  const y2 = yoe2 + era2 * 400
+  const doy2 =
+    doe2 - (365 * yoe2 + Math.floor(yoe2 / 4) - Math.floor(yoe2 / 100))
+  const mp = Math.floor((5 * doy2 + 2) / 153)
+  const d2 = doy2 - Math.floor((153 * mp + 2) / 5) + 1
+  const m2 = mp < 10 ? mp + 3 : mp - 9
+  const y3 = m2 <= 2 ? y2 + 1 : y2
+
+  const yy = String(y3)
+  const mm = String(m2).padStart(2, '0')
+  const dd = String(d2).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
 }
 
 /** Month name from Jalali month number (1-12). */

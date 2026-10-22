@@ -44,8 +44,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       setToken(data.token, remember)
       setUser(data.user)
+      setLoading(false)
     },
-    [],
+    []
   )
 
   const register = React.useCallback(
@@ -57,8 +58,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       setToken(data.token, true)
       setUser(data.user)
+      setLoading(false)
     },
-    [],
+    []
   )
 
   const logout = React.useCallback(async () => {

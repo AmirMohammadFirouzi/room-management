@@ -1,7 +1,8 @@
 import { Check, Repeat2 } from 'lucide-react'
 import type { Assignment } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { formatJalali, todayISO } from '@/lib/jalali'
+import { formatJalali } from '@/lib/jalali'
+import { useServerToday } from '@/hooks/useServerTime'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
@@ -44,7 +45,10 @@ export function TaskCard({
   confirming = false,
 }: TaskCardProps) {
   const done = assignment.status === 'confirmed'
-  const isToday = assignment.date === todayISO()
+  // "امروز" comes from the server clock — never the browser, so the
+  // confirm button can never unlock on the wrong day.
+  const serverToday = useServerToday()
+  const isToday = serverToday !== null ? assignment.date === serverToday : false
   const confirmLocked = canConfirm && !isToday
 
   return (

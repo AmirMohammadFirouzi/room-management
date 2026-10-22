@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import * as React from 'react'
 import { useAuth } from './auth'
+import { fetchServerTime } from './lib/serverTime'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/Login'
 import { DashboardPage } from './pages/Dashboard'
@@ -17,6 +19,12 @@ import { AnnounceAdminPage } from './pages/admin/Announce'
 
 export default function App() {
   const { user, loading } = useAuth()
+
+  // Start fetching the server's clock once; every date in the UI is derived
+  // from it (never the browser clock), so kick it off as early as possible.
+  React.useEffect(() => {
+    void fetchServerTime()
+  }, [])
 
   if (loading) {
     return (

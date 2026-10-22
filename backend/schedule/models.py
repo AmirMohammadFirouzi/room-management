@@ -29,6 +29,19 @@ def saturday_of(d: date_cls) -> date_cls:
     return d - timedelta(days=persian_weekday(d))
 
 
+def server_today() -> date_cls:
+    """The application's *current* date — always taken from the SERVER.
+
+    Uses Django's active timezone (Asia/Tehran, see settings), never the
+    client's browser clock. Every date-sensitive decision (today, week start,
+    confirm gating, dashboard split) must go through this helper so a wrong
+    or skewed browser clock can never shift a day.
+    """
+    from django.utils import timezone
+
+    return timezone.localdate()
+
+
 class TaskType(models.TextChoices):
     CLEANING = "cleaning", "نظافت"
     VACUUMING = "vacuuming", "جاروبرقی"
